@@ -15,6 +15,7 @@ export default function AppHeader({
   role = "admin",
   name = "A",
   onBell,
+  unreadCount = 0,
   onProfile,
   onLogout,
 }) {
@@ -58,6 +59,11 @@ export default function AppHeader({
               style={styles.bellIcon}
               resizeMode="contain"
             />
+            {unreadCount > 0 ? (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+              </View>
+            ) : null}
           </TouchableOpacity>
 
           <TouchableOpacity

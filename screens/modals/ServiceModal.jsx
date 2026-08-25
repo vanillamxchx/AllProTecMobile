@@ -1,9 +1,21 @@
 import React from "react";
 import { Modal, View, Text, Pressable, TouchableOpacity } from "react-native";
 import styles from "../../styles/css/modals/serviceModalStyles";
+import { formatTimeLabel, normalizeAllowedArrivalTimes } from "../../services/bookingWorkflow";
+import { formatPriceRangeLabel } from "../../services/servicePricing";
+import { formatConsumableSizeLabel, normalizeConsumablesBySize } from "../../services/serviceConsumables";
 
 export default function ServiceModal({ visible, service, onClose }) {
   if (!visible) return null;
+
+  const arrivalTimes = normalizeAllowedArrivalTimes(service?.allowedArrivalTimes, service?.mins)
+    .map((time) => formatTimeLabel(time))
+    .join(", ");
+  const consumables = Object.entries(
+    normalizeConsumablesBySize(service?.consumablesBySize, service?.consumables)
+  )
+    .map(([name, quantities]) => formatConsumableSizeLabel(name, quantities))
+    .join(", ");
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -15,15 +27,16 @@ export default function ServiceModal({ visible, service, onClose }) {
             <Text style={styles.title}>View Service Details</Text>
 
             <Row label="Service Name:" value={service?.name} />
-            <Row label="Description:" value={service?.description} multiline />
+            <Row label="Description:" value={service?.desc || service?.description} multiline />
+            <Row label="Category:" value={service?.category} />
+            <Row label="Price:" value={formatPriceRangeLabel(service)} />
+            <Row label="Est:" value={`${Number(service?.mins || 0)} mins`} />
+            <Row label="Arrival Times:" value={arrivalTimes} multiline />
+            <Row label="Consumables:" value={consumables} multiline />
 
-            <Row label="Price:" value={service?.price} />
-            <Row label="Est:" value={service?.est} />
-
-            {/* ✅ Status pill */}
             <View style={styles.row}>
               <Text style={styles.label}>Status:</Text>
-              <StatusPill status={service?.status} />
+              <StatusPill status={service?.status || (service?.enabled ? "Enabled" : "Disabled")} />
             </View>
 
             <View style={styles.actions}>
@@ -43,7 +56,7 @@ function Row({ label, value, multiline }) {
     <View style={[styles.row, multiline && styles.rowTop]}>
       <Text style={styles.label}>{label}</Text>
       <Text style={[styles.value, multiline && styles.valueMultiline]}>
-        {value || "—"}
+        {value || "-"}
       </Text>
     </View>
   );
@@ -59,7 +72,7 @@ function StatusPill({ status }) {
 
   return (
     <View style={[styles.statusPill, pillStyle]}>
-      <Text style={styles.statusTxt}>{status || "—"}</Text>
+      <Text style={styles.statusTxt}>{status || "-"}</Text>
     </View>
   );
 }

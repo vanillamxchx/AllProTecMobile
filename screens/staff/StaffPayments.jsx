@@ -11,6 +11,7 @@ import {
 
 import styles from "../../styles/css/staff/staffPaymentsStyles";
 import PaymentModal from "../modals/PaymentModal";
+import InvoiceModal from "../modals/InvoiceModal.jsx";
 import { useMobileData } from "../../context/MobileDataContext.jsx";
 import MobileFilterModal from "../../components/common/MobileFilterModal.jsx";
 
@@ -22,7 +23,9 @@ export default function StaffPayments() {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filters, setFilters] = useState({ status: "All", method: "All" });
 
@@ -113,13 +116,8 @@ export default function StaffPayments() {
                   <View style={[styles.colAction, styles.actionCell]}>
                     <TouchableOpacity activeOpacity={0.85} style={styles.viewBtn} onPress={() => {
                       setSelected({
+                        ...payment,
                         id: payment.bookingId || payment.id,
-                        date: payment.date,
-                        customer: payment.customer,
-                        service: payment.service,
-                        amount: payment.amount,
-                        status: payment.status,
-                        method: payment.method,
                       });
                       setModalOpen(true);
                     }}>
@@ -144,7 +142,16 @@ export default function StaffPayments() {
           </View>
         </ScrollView>
 
-        <PaymentModal visible={modalOpen} payment={selected} onClose={() => setModalOpen(false)} />
+        <PaymentModal
+          visible={modalOpen}
+          payment={selected}
+          onClose={() => setModalOpen(false)}
+          onViewInvoice={(payment) => {
+            setSelectedInvoice(payment);
+            setInvoiceOpen(true);
+          }}
+        />
+        <InvoiceModal visible={invoiceOpen} payment={selectedInvoice} onClose={() => setInvoiceOpen(false)} />
         <MobileFilterModal
           open={filterOpen}
           title="Filter Payments"

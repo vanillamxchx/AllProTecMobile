@@ -265,6 +265,23 @@ export default StyleSheet.create({
     color: "#111827",
   },
 
+  changePasswordBtn: {
+    marginTop: 12,
+    height: 46,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E1BC35",
+    backgroundColor: "#FFFBEB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  changePasswordTxt: {
+    fontSize: 14,
+    fontWeight: "950",
+    color: "#111827",
+  },
+
   cancelBtn: {
     marginTop: 10,
     height: 46,

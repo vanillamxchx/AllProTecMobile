@@ -2,64 +2,60 @@ import { StyleSheet, Platform } from "react-native";
 
 export default StyleSheet.create({
   root: { flex: 1 },
-
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.18)",
   },
-
   center: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 18,
   },
-
   card: {
     width: "100%",
     maxWidth: 520,
+    maxHeight: "88%",
     backgroundColor: "#FFF",
-    borderRadius: 46,
-    paddingVertical: 26,
-    paddingHorizontal: 26,
+    borderRadius: 32,
+    paddingVertical: 22,
+    paddingHorizontal: 22,
     borderWidth: 2,
     borderColor: "#111827",
-
     shadowColor: "#000",
     shadowOpacity: Platform.OS === "web" ? 0.35 : 0.3,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 12 },
     elevation: 12,
   },
-
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "950",
     color: "#111827",
     marginBottom: 18,
   },
-
   row: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 10,
   },
-
+  rowTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 10,
+  },
   label: {
-    width: 165,
+    width: 140,
     fontSize: 14,
     fontWeight: "950",
     color: "#111827",
   },
-
   value: {
     flex: 1,
     fontSize: 14,
     fontWeight: "800",
     color: "#6B7280",
   },
-
-  /* ✅ status pill */
   statusPill: {
     paddingHorizontal: 18,
     paddingVertical: 7,
@@ -71,11 +67,11 @@ export default StyleSheet.create({
     fontWeight: "950",
     color: "#A16207",
   },
-
   stPending: { backgroundColor: "#FEF3C7" },
   stPaid: { backgroundColor: "#DCFCE7" },
+  stReview: { backgroundColor: "#DBEAFE" },
+  stRejected: { backgroundColor: "#FEE2E2" },
   stDefault: { backgroundColor: "#E5E7EB" },
-
   miniBtn: {
     minWidth: 120,
     height: 34,
@@ -91,10 +87,8 @@ export default StyleSheet.create({
     fontWeight: "900",
     color: "#111827",
   },
-
   proofBtn: {
-    flex: 1,
-    height: 36,
+    minHeight: 40,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#D1D5DB",
@@ -107,13 +101,225 @@ export default StyleSheet.create({
     fontSize: 13,
     fontWeight: "900",
     color: "#111827",
+    textAlign: "center",
   },
-
+  proofActionsCol: {
+    flex: 1,
+    gap: 8,
+  },
+  proofBtnSecondary: {
+    minHeight: 40,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#F9FAFB",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  proofBtnSecondaryTxt: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#374151",
+    textAlign: "center",
+  },
+  proofPreviewWrap: {
+    marginTop: 8,
+    marginBottom: 14,
+  },
+  blockLabel: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#111827",
+    marginBottom: 8,
+  },
+  proofPreviewImage: {
+    width: "100%",
+    height: 180,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#F9FAFB",
+  },
+  fieldLabel: {
+    marginTop: 10,
+    marginBottom: 8,
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  input: {
+    minHeight: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FFF",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  inputDisabled: {
+    backgroundColor: "#F3F4F6",
+    color: "#6B7280",
+  },
+  textArea: {
+    minHeight: 88,
+    textAlignVertical: "top",
+  },
+  choiceWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  choiceBtn: {
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    backgroundColor: "#FFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  choiceBtnActive: {
+    backgroundColor: "#F6E7B6",
+    borderColor: "#D7B24A",
+  },
+  choiceBtnDisabled: {
+    backgroundColor: "#F9FAFB",
+    borderColor: "#E5E7EB",
+    opacity: 0.72,
+  },
+  choiceTxt: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  choiceTxtActive: {
+    fontWeight: "900",
+  },
+  choiceTxtDisabled: {
+    color: "#6B7280",
+  },
+  rewardPreview: {
+    marginTop: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#F9FAFB",
+    padding: 12,
+    gap: 4,
+  },
+  rewardTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  rewardMeta: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6B7280",
+  },
+  summaryGrid: {
+    marginTop: 8,
+    marginBottom: 10,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  summaryCard: {
+    width: "48%",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#F9FAFB",
+    padding: 12,
+  },
+  summaryLabel: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  summaryValue: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  uploadBtn: {
+    minHeight: 42,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    backgroundColor: "#FFF",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  uploadBtnTxt: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  uploadBtnDisabled: {
+    backgroundColor: "#F3F4F6",
+    opacity: 0.75,
+  },
+  fileTxt: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6B7280",
+  },
+  errorTxt: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#DC2626",
+  },
   actions: {
     marginTop: 18,
     alignItems: "flex-end",
   },
-
+  actionsRow: {
+    marginTop: 16,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+  },
+  primaryBtn: {
+    minWidth: 120,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "#D7B24A",
+    borderWidth: 1,
+    borderColor: "#B38B1F",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primaryBtnTxt: {
+    fontSize: 14,
+    fontWeight: "950",
+    color: "#111827",
+  },
+  secondaryBtn: {
+    minWidth: 110,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  secondaryBtnTxt: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#111827",
+  },
   closeBtn: {
     minWidth: 140,
     height: 46,
@@ -123,14 +329,12 @@ export default StyleSheet.create({
     borderColor: "#B38B1F",
     alignItems: "center",
     justifyContent: "center",
-
     shadowColor: "#000",
     shadowOpacity: Platform.OS === "web" ? 0.25 : 0.2,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 5 },
     elevation: 5,
   },
-
   closeTxt: {
     fontSize: 16,
     fontWeight: "950",

@@ -75,9 +75,29 @@ export default StyleSheet.create({
     color: "#111827",
   },
 
-  stPending: { backgroundColor: "#FEF3C7" }, // yellow
-  stPaid: { backgroundColor: "#DCFCE7" },    // green
-  stDefault: { backgroundColor: "#E5E7EB" }, // gray
+  stPending: { backgroundColor: "#FEF3C7" },
+  stPaid: { backgroundColor: "#DCFCE7" },
+  stReview: { backgroundColor: "#DBEAFE" },
+  stRejected: { backgroundColor: "#FEE2E2" },
+  stDefault: { backgroundColor: "#E5E7EB" },
+
+  sectionTitle: {
+    marginTop: 14,
+    marginBottom: 8,
+    fontSize: 12,
+    fontWeight: "950",
+    color: "#111827",
+    textTransform: "uppercase",
+  },
+
+  proofImage: {
+    width: "100%",
+    height: 180,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F6",
+    marginTop: 8,
+    marginBottom: 8,
+  },
 
   actions: {
     marginTop: 14,

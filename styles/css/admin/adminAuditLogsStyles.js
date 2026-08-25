@@ -53,32 +53,6 @@ export default StyleSheet.create({
     justifyContent: "center",
   },
   filterIcon: { width: 20, height: 20, opacity: 0.75 },
-  toolbarRow: {
-    marginBottom: 8,
-  },
-  modeToggle: {
-    flex: 1,
-    flexDirection: "row",
-    backgroundColor: "#FFF",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 14,
-    padding: 4,
-    gap: 4,
-  },
-  modeBtn: {
-    flex: 1,
-    minHeight: 38,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 10,
-  },
-  modeBtnActive: {
-    backgroundColor: "#FEF3C7",
-  },
-  modeTxt: { color: "#6B7280", fontWeight: "900", fontSize: 12 },
-  modeTxtActive: { color: "#111827" },
   resultsTxt: {
     marginTop: 2,
     marginBottom: 10,
@@ -147,35 +121,6 @@ export default StyleSheet.create({
   },
   emptyRow: { paddingVertical: 14, paddingHorizontal: 10 },
   emptyTxt: { fontSize: 11, fontWeight: "800", color: "#111827" },
-  rowActionBtn: {
-    minWidth: 92,
-    minHeight: 34,
-    borderRadius: 999,
-    backgroundColor: "#111827",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 10,
-  },
-  rowActionBtnGhost: {
-    backgroundColor: "#FFF",
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-  },
-  rowActionBtnDisabled: {
-    backgroundColor: "#D1D5DB",
-    borderColor: "#D1D5DB",
-  },
-  rowActionTxt: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: "#FFF",
-  },
-  rowActionTxtGhost: {
-    color: "#111827",
-  },
-  rowActionTxtDisabled: {
-    color: "#6B7280",
-  },
   pager: {
     marginTop: 12,
     flexDirection: "row",

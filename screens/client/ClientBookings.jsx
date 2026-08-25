@@ -79,17 +79,22 @@ export default function ClientBookings({ onAddNew }) {
 
   const openDetails = (booking) => {
     setSelected({
+      _id: booking._id,
       id: booking.id,
       date: formatDate(booking.date),
       rawDate: booking.date,
       customer: booking.customer,
+      customerEmail: booking.customerEmail,
       vehicleModel: booking.vehicle,
       carSize: booking.carSize,
       plate: booking.plate,
       service: booking.service,
+      promoId: booking.promoId,
       assignedTo: booking.assigned || "-",
       time: booking.time || "-",
+      placeSlot: booking.placeSlot,
       amount: booking.amount,
+      originalAmount: booking.originalAmount,
       status: booking.status,
       issueNote: booking.issueNote,
       issueTypes: booking.issueTypes,

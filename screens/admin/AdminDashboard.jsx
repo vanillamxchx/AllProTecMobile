@@ -78,11 +78,12 @@ function getAlertRoute(title, description) {
 }
 
 export default function AdminDashboard({ onNavigate }) {
-  const { bookings, inventory, alerts, summary } = useMobileData();
+  const { bookings, inventory, alerts, quoteRequests, summary } = useMobileData();
 
   const today = useMemo(() => new Date(), []);
   const [monthDate, setMonthDate] = useState(() => startOfMonth(today));
   const [selectedDate, setSelectedDate] = useState(() => new Date(today));
+  const [selectedQuoteRequestId, setSelectedQuoteRequestId] = useState("");
 
   const { width } = useWindowDimensions();
   const clamp = (n, min, max) => Math.min(Math.max(n, min), max);
@@ -114,6 +115,12 @@ export default function AdminDashboard({ onNavigate }) {
       inventory.filter((item) => item.maxStock && item.currentStock / item.maxStock <= 0.25).length
   );
   const paidRevenue = Number(summary.paidRevenue || 0);
+  const quoteRequestCount = Number(summary.quoteRequestCount || quoteRequests.length || 0);
+  const recentQuoteRequests = useMemo(() => quoteRequests.slice(0, 6), [quoteRequests]);
+  const selectedQuoteRequest = useMemo(
+    () => recentQuoteRequests.find((item) => String(item.id || item._id || "") === String(selectedQuoteRequestId || "")) || null,
+    [recentQuoteRequests, selectedQuoteRequestId]
+  );
   const attentionAlerts = useMemo(() => {
     const nextAlerts = alerts.map((item) => {
       const title = String(item.title || "").trim();
@@ -157,6 +164,17 @@ export default function AdminDashboard({ onNavigate }) {
     }
   };
 
+  const quoteStatusLabel = (status) =>
+    String(status || "").trim().toLowerCase() === "received" ? "Received" : "Under Review";
+
+  const statCards = [
+    { key: "bookings-today", value: bookingsToday, label: "Bookings today", route: "bookings" },
+    { key: "in-progress", value: inProgressCount, label: "In Progress", route: "tracking" },
+    { key: "low-stock", value: lowStockCount, label: "Low Stock", route: "inventory" },
+    { key: "paid-revenues", value: `PHP ${paidRevenue.toLocaleString()}`, label: "Paid Revenues", route: "payments" },
+    { key: "quote-requests", value: quoteRequestCount, label: "Quote Requests" },
+  ];
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={[styles.stage, { width: stageW }]}>
@@ -167,22 +185,25 @@ export default function AdminDashboard({ onNavigate }) {
           </View>
 
           <View style={styles.statsGrid}>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{bookingsToday}</Text>
-              <Text style={styles.statLabel}>Bookings today</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{inProgressCount}</Text>
-              <Text style={styles.statLabel}>In Progress</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{lowStockCount}</Text>
-              <Text style={styles.statLabel}>Low Stock</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>PHP {paidRevenue.toLocaleString()}</Text>
-              <Text style={styles.statLabel}>Paid Revenues</Text>
-            </View>
+            {statCards.map((card) => (
+              <TouchableOpacity
+                key={card.key}
+                activeOpacity={0.85}
+                style={styles.statCard}
+                onPress={() => {
+                  if (card.route) {
+                    onNavigate?.(card.route);
+                    return;
+                  }
+                  if (recentQuoteRequests[0]) {
+                    setSelectedQuoteRequestId(String(recentQuoteRequests[0].id || recentQuoteRequests[0]._id || ""));
+                  }
+                }}
+              >
+                <Text style={styles.statValue}>{card.value}</Text>
+                <Text style={styles.statLabel}>{card.label}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
           <View style={styles.section}>
@@ -209,6 +230,94 @@ export default function AdminDashboard({ onNavigate }) {
                 ))
               )}
             </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Recent Quote Requests</Text>
+            <Text style={styles.sectionSub}>Landing-page quote requests from potential customers.</Text>
+
+            <View style={styles.stack}>
+              {recentQuoteRequests.length ? (
+                recentQuoteRequests.map((request) => {
+                  const requestId = String(request.id || request._id || "");
+                  const isSelected = requestId === String(selectedQuoteRequestId || "");
+                  return (
+                    <TouchableOpacity
+                      key={requestId}
+                      activeOpacity={0.85}
+                      style={[styles.quoteCard, isSelected && styles.quoteCardSelected]}
+                      onPress={() => setSelectedQuoteRequestId(requestId)}
+                    >
+                      <View style={styles.quoteHead}>
+                        <Text style={styles.quoteTitle}>
+                          {request.fullName || "Unknown"} - {request.service || "Service"}
+                        </Text>
+                        <View
+                          style={[
+                            styles.quoteStatusPill,
+                            quoteStatusLabel(request.status) === "Received"
+                              ? styles.quoteStatusReceived
+                              : styles.quoteStatusReview,
+                          ]}
+                        >
+                          <Text style={styles.quoteStatusText}>{quoteStatusLabel(request.status)}</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.quoteMeta}>
+                        {request.vehicleType || "Vehicle"} - {request.carSize || "Size"} - {request.phone || "No phone"}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })
+              ) : (
+                <View style={styles.alertCard}>
+                  <Text style={styles.alertTitle}>No quote requests yet</Text>
+                  <Text style={styles.alertSub}>New quote requests from the landing page will show here.</Text>
+                </View>
+              )}
+            </View>
+
+            {selectedQuoteRequest ? (
+              <View style={styles.detailCard}>
+                <Text style={styles.cardTitle}>Quote Request Details</Text>
+                <Text style={styles.cardSub}>Review the selected landing-page quote request.</Text>
+
+                <View style={styles.detailGrid}>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Name</Text>
+                    <Text style={styles.detailValue}>{selectedQuoteRequest.fullName || "-"}</Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Phone</Text>
+                    <Text style={styles.detailValue}>{selectedQuoteRequest.phone || "-"}</Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Vehicle Type</Text>
+                    <Text style={styles.detailValue}>{selectedQuoteRequest.vehicleType || "-"}</Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Car Size</Text>
+                    <Text style={styles.detailValue}>{selectedQuoteRequest.carSize || "-"}</Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Service</Text>
+                    <Text style={styles.detailValue}>{selectedQuoteRequest.service || "-"}</Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Estimate</Text>
+                    <Text style={styles.detailValue}>
+                      {selectedQuoteRequest.estimateLabel || "Custom quote available upon review"}
+                    </Text>
+                  </View>
+                  <View style={styles.detailItemWide}>
+                    <Text style={styles.detailLabel}>Message</Text>
+                    <Text style={styles.detailValue}>
+                      {selectedQuoteRequest.message || "No additional notes provided."}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ) : null}
           </View>
 
           <View style={styles.section}>

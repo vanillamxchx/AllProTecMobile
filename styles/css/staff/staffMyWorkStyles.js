@@ -1,0 +1,181 @@
+import { StyleSheet } from "react-native";
+
+export default StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#f3f4f6",
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 36,
+    gap: 14,
+  },
+  heroCard: {
+    backgroundColor: "#1f2937",
+    borderRadius: 22,
+    padding: 18,
+  },
+  eyebrow: {
+    color: "#86efac",
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  heroTitle: {
+    color: "#f9fafb",
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  heroSub: {
+    color: "#d1d5db",
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 8,
+  },
+  exportButton: {
+    marginTop: 14,
+    alignSelf: "flex-start",
+    backgroundColor: "#10b981",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+  },
+  exportButtonText: {
+    color: "#052e16",
+    fontWeight: "800",
+    fontSize: 12,
+  },
+  panel: {
+    backgroundColor: "#ffffff",
+    borderRadius: 18,
+    padding: 14,
+  },
+  panelTitle: {
+    color: "#111827",
+    fontSize: 17,
+    fontWeight: "800",
+  },
+  panelSub: {
+    color: "#6b7280",
+    fontSize: 13,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: "#f9fafb",
+    color: "#111827",
+    marginBottom: 10,
+  },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  chip: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+  },
+  chipActive: {
+    backgroundColor: "#dcfce7",
+    borderColor: "#4ade80",
+  },
+  chipText: {
+    color: "#374151",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  chipTextActive: {
+    color: "#166534",
+  },
+  workCard: {
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 18,
+    padding: 14,
+    marginTop: 12,
+    backgroundColor: "#fcfcfd",
+  },
+  workTitle: {
+    color: "#111827",
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  workMeta: {
+    color: "#6b7280",
+    fontSize: 12,
+    marginTop: 4,
+  },
+  tagRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 12,
+  },
+  tag: {
+    backgroundColor: "#e5e7eb",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  tagText: {
+    color: "#111827",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  detailGrid: {
+    marginTop: 12,
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  detailLabel: {
+    color: "#6b7280",
+    fontSize: 12,
+    flex: 1,
+  },
+  detailValue: {
+    color: "#111827",
+    fontSize: 12,
+    fontWeight: "700",
+    flex: 1,
+    textAlign: "right",
+  },
+  commissionCard: {
+    borderWidth: 1,
+    borderColor: "#d1fae5",
+    borderRadius: 16,
+    padding: 12,
+    marginTop: 10,
+    backgroundColor: "#f0fdf4",
+  },
+  commissionTitle: {
+    color: "#14532d",
+    fontWeight: "800",
+    fontSize: 14,
+  },
+  commissionMeta: {
+    color: "#166534",
+    fontSize: 12,
+    marginTop: 4,
+  },
+  emptyText: {
+    color: "#6b7280",
+    fontSize: 13,
+    textAlign: "center",
+    paddingVertical: 18,
+  },
+});

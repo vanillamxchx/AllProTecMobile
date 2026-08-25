@@ -64,11 +64,33 @@ export default StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    position: "relative",
   },
 
   bellIcon: {
     width: 24,
     height: 24,
+  },
+
+  bellBadge: {
+    position: "absolute",
+    top: 3,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 999,
+    paddingHorizontal: 4,
+    backgroundColor: "#DC2626",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  bellBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#FFFFFF",
   },
 
   avatar: {

@@ -143,6 +143,8 @@ export default StyleSheet.create({
     justifyContent: "center",
   },
   pageNumTxt: { fontSize: 13, fontWeight: "950", color: "#111827" },
+  emptyRow: { paddingVertical: 14, paddingHorizontal: 10 },
+  emptyTxt: { fontSize: 11, fontWeight: "800", color: "#111827" },
   modalOverlay: {
     flex: 1,
     justifyContent: "center",

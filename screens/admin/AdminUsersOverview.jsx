@@ -9,6 +9,18 @@ import MobileFilterModal from "../../components/common/MobileFilterModal.jsx";
 const ICON_SEARCH = require("../../styles/icons/search.png");
 const ICON_FILTER = require("../../styles/icons/filter.png");
 
+function toDisplayUserType(value) {
+  const normalizedValue = String(value || "").trim().toLowerCase();
+  if (normalizedValue === "customer") return "Client";
+  if (!normalizedValue) return "Client";
+  return normalizedValue.charAt(0).toUpperCase() + normalizedValue.slice(1);
+}
+
+function isAdminOrStaffUser(user) {
+  const userType = String(user?.userType || "").trim().toLowerCase();
+  return userType === "admin" || userType === "staff";
+}
+
 export default function AdminUsersOverview() {
   const { users } = useMobileData();
   const [query, setQuery] = useState("");
@@ -16,25 +28,27 @@ export default function AdminUsersOverview() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [filters, setFilters] = useState({ role: "All", status: "All" });
 
+  const adminAndStaffUsers = useMemo(() => users.filter(isAdminOrStaffUser), [users]);
+
   const roleOptions = useMemo(
-    () => Array.from(new Set(users.map((user) => String(user.role || "").trim()).filter(Boolean))),
-    [users]
+    () => Array.from(new Set(adminAndStaffUsers.map((user) => String(user.role || "").trim()).filter(Boolean))),
+    [adminAndStaffUsers]
   );
   const statusOptions = useMemo(
-    () => Array.from(new Set(users.map((user) => String(user.status || "").trim()).filter(Boolean))),
-    [users]
+    () => Array.from(new Set(adminAndStaffUsers.map((user) => String(user.status || "").trim()).filter(Boolean))),
+    [adminAndStaffUsers]
   );
 
   const filtered = useMemo(() => {
     const q = String(query || "").trim().toLowerCase();
-    return users.filter((user) => {
+    return adminAndStaffUsers.filter((user) => {
       const matchesQuery =
-        !q || `${user.name} ${user.role} ${user.email} ${user.status}`.toLowerCase().includes(q);
+        !q || `${user.name} ${user.userType} ${user.role} ${user.email} ${user.status}`.toLowerCase().includes(q);
       const matchesRole = filters.role === "All" || String(user.role || "").trim() === filters.role;
       const matchesStatus = filters.status === "All" || String(user.status || "").trim() === filters.status;
       return matchesQuery && matchesRole && matchesStatus;
     });
-  }, [users, query, filters]);
+  }, [adminAndStaffUsers, query, filters]);
 
   const pageSize = 6;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -50,9 +64,10 @@ export default function AdminUsersOverview() {
       subtitle: "User accounts exported in tabular format.",
       sections: [
         {
-          columns: ["Name", "Role", "Email", "Status"],
+          columns: ["Name", "User Type", "Role", "Email", "Status"],
           rows: filtered.map((user) => [
             user.name || "-",
+            toDisplayUserType(user.userType),
             user.role || "-",
             user.email || "-",
             user.status || "-",
@@ -67,7 +82,7 @@ export default function AdminUsersOverview() {
       <View style={styles.head}>
         <View style={{ flex: 1 }}>
           <Text style={styles.h1}>Users Overview</Text>
-          <Text style={styles.h2}>View admin/staff/client accounts.</Text>
+          <Text style={styles.h2}>View admin and staff accounts.</Text>
         </View>
         <TouchableOpacity activeOpacity={0.85} style={styles.exportBtn} onPress={exportPdf}>
           <Text style={styles.exportTxt}>Export PDF</Text>
@@ -95,27 +110,45 @@ export default function AdminUsersOverview() {
       </View>
 
       <View style={styles.tableCard}>
-        <View style={styles.tableHead}>
-          <Text style={[styles.th, styles.colName]}>Name</Text>
-          <Text style={[styles.th, styles.colRole]}>Role</Text>
-          <Text style={[styles.th, styles.colEmail]}>Email</Text>
-          <Text style={[styles.th, styles.colStatus]}>Status</Text>
-        </View>
-
-        {paged.map((user, idx) => (
-          <View key={`${user.id}-${idx}`} style={[styles.tr, idx === paged.length - 1 && styles.trLast]}>
-            <Text style={[styles.td, styles.colName]}>{user.name}</Text>
-
-            <View style={[styles.colRole, styles.roleCell]}>
-              <View style={styles.rolePill}>
-                <Text style={styles.roleTxt}>{user.role}</Text>
-              </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tableScrollContent}>
+          <View style={styles.tableInner}>
+            <View style={styles.tableHead}>
+              <Text style={[styles.th, styles.colName]}>Name</Text>
+              <Text style={[styles.th, styles.colUserType]}>User Type</Text>
+              <Text style={[styles.th, styles.colRole]}>Role</Text>
+              <Text style={[styles.th, styles.colEmail]}>Email</Text>
+              <Text style={[styles.th, styles.colStatus]}>Status</Text>
             </View>
 
-            <Text style={[styles.td, styles.colEmail]}>{user.email}</Text>
-            <Text style={[styles.td, styles.colStatus, statusStyle(user.status)]}>{user.status}</Text>
+            {paged.map((user, idx) => (
+              <View key={`${user.id}-${idx}`} style={[styles.tr, idx === paged.length - 1 && styles.trLast]}>
+                <Text style={[styles.td, styles.colName]}>{user.name}</Text>
+                <Text style={[styles.td, styles.colUserType]}>{toDisplayUserType(user.userType)}</Text>
+
+                <View style={[styles.colRole, styles.roleCell]}>
+                  <View style={styles.rolePill}>
+                    <Text style={styles.roleTxt}>{user.role}</Text>
+                  </View>
+                </View>
+
+                <Text style={[styles.td, styles.colEmail]}>{user.email}</Text>
+                <Text style={[styles.td, styles.colStatus, statusStyle(user.status)]}>{user.status}</Text>
+              </View>
+            ))}
           </View>
-        ))}
+        </ScrollView>
+      </View>
+
+      <View style={styles.pager}>
+        <TouchableOpacity activeOpacity={0.85} style={styles.pageBtn} onPress={() => setPage((p) => Math.max(1, p - 1))}>
+          <Text style={styles.pageTxt}>{"<"}</Text>
+        </TouchableOpacity>
+        <View style={styles.pageNum}>
+          <Text style={styles.pageNumTxt}>{safePage}</Text>
+        </View>
+        <TouchableOpacity activeOpacity={0.85} style={styles.pageBtn} onPress={() => setPage((p) => Math.min(totalPages, p + 1))}>
+          <Text style={styles.pageTxt}>{">"}</Text>
+        </TouchableOpacity>
       </View>
 
       <MobileFilterModal

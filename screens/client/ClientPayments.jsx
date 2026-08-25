@@ -12,51 +12,110 @@ import {
 
 import styles from "../../styles/css/client/clientPaymentsStyles";
 import ClientPaymentModal from "../modals/ClientPaymentModal";
+import InvoiceModal from "../modals/InvoiceModal.jsx";
 import { useMobileData } from "../../context/MobileDataContext.jsx";
 import MobileFilterModal from "../../components/common/MobileFilterModal.jsx";
 
 const ICON_SEARCH = require("../../styles/icons/search.png");
 const ICON_FILTER = require("../../styles/icons/filter.png");
 
-const statusMeta = (status) => {
-  const s = String(status || "").toLowerCase();
-  if (s.includes("paid")) {
-    return { pill: styles.pillGreen, text: styles.pillGreenText, label: "Paid" };
+function getStageMeta(label) {
+  const value = String(label || "").toLowerCase();
+  if (value.includes("paid")) {
+    return { pill: styles.pillGreen, text: styles.pillGreenText, label };
   }
-  if (s.includes("verification")) {
-    return { pill: styles.pillYellow, text: styles.pillYellowText, label: "For Verification" };
+  if (value.includes("verification")) {
+    return { pill: styles.pillBlue, text: styles.pillBlueText, label };
   }
-  return { pill: styles.pillYellow, text: styles.pillYellowText, label: "Pending" };
-};
+  if (value.includes("reject") || value.includes("cancel")) {
+    return { pill: styles.pillRed, text: styles.pillRedText, label };
+  }
+  return { pill: styles.pillYellow, text: styles.pillYellowText, label };
+}
+
+function getCustomerProofAction(payment = {}, getPaymentStageLabel, normalizeStageStatus) {
+  if (payment.autoCancelledForNoDownPaymentProof) {
+    return { label: "Cancelled", disabled: true, mode: "" };
+  }
+
+  const legacyStatus = normalizeStageStatus(payment.status, "Pending");
+  const downPaymentStatus = normalizeStageStatus(
+    payment.downPaymentStatus,
+    payment.downPaymentRequired === false ? "Not Required" : "Pending"
+  );
+  const finalPaymentStatus = normalizeStageStatus(payment.finalPaymentStatus, legacyStatus);
+
+  if (finalPaymentStatus === "Paid" || legacyStatus === "Paid") {
+    return { label: "Verified", disabled: true, mode: "", stage: getPaymentStageLabel(payment) };
+  }
+  if (finalPaymentStatus === "For Verification") {
+    return { label: "Pending Review", disabled: true, mode: "", stage: getPaymentStageLabel(payment) };
+  }
+  if (payment.downPaymentRequired === true && ["Pending", "Rejected"].includes(downPaymentStatus)) {
+    return { label: "Upload DP", disabled: false, mode: "downPayment", stage: getPaymentStageLabel(payment) };
+  }
+  if (payment.downPaymentRequired === true && downPaymentStatus === "For Verification") {
+    return { label: "DP Review", disabled: true, mode: "", stage: getPaymentStageLabel(payment) };
+  }
+  if (
+    payment.downPaymentRequired === false ||
+    downPaymentStatus === "Not Required" ||
+    downPaymentStatus === "Paid"
+  ) {
+    return { label: "Pay Balance", disabled: false, mode: "finalPayment", stage: getPaymentStageLabel(payment) };
+  }
+
+  return { label: "Upload DP", disabled: false, mode: "downPayment", stage: getPaymentStageLabel(payment) };
+}
 
 export default function ClientPayments() {
-  const { scopedPayments, submitPaymentProof } = useMobileData();
+  const {
+    scopedPayments,
+    scopedRewards,
+    submitPaymentProof,
+    getPaymentStageLabel,
+    normalizeStageStatus,
+    getPaymentTotal,
+    getAmountPaid,
+    getRemainingBalance,
+  } = useMobileData();
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
+  const [invoiceSelected, setInvoiceSelected] = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filters, setFilters] = useState({ status: "All", method: "All" });
 
   const statusOptions = useMemo(
-    () => Array.from(new Set(scopedPayments.map((payment) => String(payment.status || "").trim()).filter(Boolean))),
-    [scopedPayments]
+    () => Array.from(new Set(scopedPayments.map((payment) => getPaymentStageLabel(payment)).filter(Boolean))),
+    [getPaymentStageLabel, scopedPayments]
   );
   const methodOptions = useMemo(
-    () => Array.from(new Set(scopedPayments.map((payment) => String(payment.method || "").trim()).filter(Boolean))),
+    () => Array.from(new Set(scopedPayments.flatMap((payment) => [
+      String(payment.method || "").trim(),
+      String(payment.downPaymentMethod || "").trim(),
+      String(payment.finalPaymentMethod || "").trim(),
+    ].filter(Boolean)))),
     [scopedPayments]
   );
 
   const filtered = useMemo(() => {
     const q = String(query || "").trim().toLowerCase();
     return scopedPayments.filter((payment) => {
+      const stageLabel = getPaymentStageLabel(payment);
       const matchesQuery =
-        !q || `${payment.id} ${payment.bookingId} ${payment.service} ${payment.status}`.toLowerCase().includes(q);
-      const matchesStatus = filters.status === "All" || String(payment.status || "").trim() === filters.status;
-      const matchesMethod = filters.method === "All" || String(payment.method || "").trim() === filters.method;
+        !q || `${payment.id} ${payment.bookingId} ${payment.service} ${payment.status} ${stageLabel} ${payment.method || ""} ${payment.downPaymentMethod || ""} ${payment.finalPaymentMethod || ""}`.toLowerCase().includes(q);
+      const matchesStatus = filters.status === "All" || stageLabel === filters.status || String(payment.status || "").trim() === filters.status;
+      const matchesMethod =
+        filters.method === "All" ||
+        String(payment.method || "").trim() === filters.method ||
+        String(payment.downPaymentMethod || "").trim() === filters.method ||
+        String(payment.finalPaymentMethod || "").trim() === filters.method;
       return matchesQuery && matchesStatus && matchesMethod;
     });
-  }, [scopedPayments, query, filters]);
+  }, [scopedPayments, query, filters, getPaymentStageLabel]);
 
   const pageSize = 5;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -69,7 +128,7 @@ export default function ClientPayments() {
   const openDetails = (payment) => {
     setSelected({
       ...payment,
-      id: payment.bookingId || payment.id,
+      displayBookingId: payment.bookingId || payment.id,
     });
     setModalOpen(true);
   };
@@ -117,7 +176,8 @@ export default function ClientPayments() {
               </View>
             ) : (
               pageRows.map((payment) => {
-                const meta = statusMeta(payment.status);
+                const proofAction = getCustomerProofAction(payment, getPaymentStageLabel, normalizeStageStatus);
+                const meta = getStageMeta(proofAction.stage);
                 return (
                   <View key={payment.id} style={styles.tRow}>
                     <Text style={[styles.td, styles.tdId]}>{payment.bookingId || payment.id}</Text>
@@ -127,7 +187,7 @@ export default function ClientPayments() {
                     </View>
                     <View style={styles.tdAct}>
                       <TouchableOpacity activeOpacity={0.9} style={styles.viewBtn} onPress={() => openDetails(payment)}>
-                        <Text style={styles.viewBtnTxt}>View Details</Text>
+                        <Text style={styles.viewBtnTxt}>{proofAction.label}</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -156,21 +216,27 @@ export default function ClientPayments() {
         <ClientPaymentModal
           visible={modalOpen}
           payment={selected}
+          usableRewards={scopedRewards}
+          getPaymentStageLabel={getPaymentStageLabel}
+          getAmountPaid={getAmountPaid}
+          getPaymentTotal={getPaymentTotal}
+          getRemainingBalance={getRemainingBalance}
+          normalizeStageStatus={normalizeStageStatus}
           onClose={() => setModalOpen(false)}
-          onViewInvoice={(payment) => Alert.alert("Invoice", `Invoice preview for ${payment?.bookingId || payment?.id}`)}
-          onUploadProof={async (payment) => {
-            try {
-              await submitPaymentProof(payment, {
-                method: payment?.method || "GCash",
-                reference: `MOBILE-${Date.now()}`,
-                notes: "Uploaded from mobile app",
-              });
-              Alert.alert("Submitted", "Payment proof sent for verification.");
-              setModalOpen(false);
-            } catch (error) {
-              Alert.alert("Upload failed", error.message || "Could not submit proof.");
-            }
+          onViewInvoice={(payment) => {
+            setInvoiceSelected(payment);
+            setInvoiceOpen(true);
           }}
+          onSubmitProof={async (payment, payload) => {
+            await submitPaymentProof(payment, payload);
+            Alert.alert("Submitted", "Payment proof sent for verification.");
+            setModalOpen(false);
+          }}
+        />
+        <InvoiceModal
+          visible={invoiceOpen}
+          payment={invoiceSelected}
+          onClose={() => setInvoiceOpen(false)}
         />
         <MobileFilterModal
           open={filterOpen}

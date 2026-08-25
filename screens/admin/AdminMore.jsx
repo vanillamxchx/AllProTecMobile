@@ -12,6 +12,7 @@ const I_USERS = require("../../styles/icons/users.png");
 const I_AUDIT = require("../../styles/icons/audit.png");
 const I_PROFILE = require("../../styles/icons/profile.png");
 const I_FINANCIAL = require("../../styles/icons/payments.png");
+const I_DETAILERS = require("../../styles/icons/tracking.png");
 
 export default function AdminMore({ onOpenModule }) {
   const tiles = useMemo(
@@ -23,6 +24,7 @@ export default function AdminMore({ onOpenModule }) {
       { key: "financial", label: "Financial Tracker", icon: I_FINANCIAL },
       { key: "engagement", label: "Engagement", icon: I_ENGAGEMENT },
       { key: "users", label: "Users Overview", icon: I_USERS },
+      { key: "detailer-management", label: "Detailer Management", icon: I_DETAILERS },
       { key: "audit", label: "Audit Logs", icon: I_AUDIT },
       { key: "profile", label: "Profile", icon: I_PROFILE },
     ],

@@ -14,10 +14,13 @@ const INITIAL_DATA = {
   auditLogs: [],
   reviews: [],
   promos: [],
+  quoteRequests: [],
   expenses: [],
   commissions: [],
   alerts: [],
   summary: {},
+  rewards: [],
+  customerRewards: [],
 };
 
 function normalizeRole(userType, role) {
@@ -44,6 +47,187 @@ function getAuditLogKey(log) {
   return String(log?.id || log?._id || "").trim();
 }
 
+function getWebStorage() {
+  if (Platform.OS !== "web" || typeof window === "undefined") return null;
+  try {
+    return window.localStorage ?? null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function readStoredNotificationId(key) {
+  const storage = getWebStorage();
+  if (!storage || !key) return "";
+  try {
+    return String(storage.getItem(key) || "").trim();
+  } catch (_error) {
+    return "";
+  }
+}
+
+function writeStoredNotificationId(key, value) {
+  const storage = getWebStorage();
+  if (!storage || !key) return;
+  try {
+    if (value) storage.setItem(key, value);
+    else storage.removeItem(key);
+  } catch (_error) {
+    // Ignore storage issues and keep in-memory state.
+  }
+}
+
+function buildNotificationMessage(log) {
+  const actor = log.userId || "System";
+  const target = log.targetId ? ` (${log.targetId})` : "";
+  return `${actor} ${String(log.action || "").toLowerCase()}${target}`;
+}
+
+function mapAuditLogToNotification(log) {
+  return {
+    id: getAuditLogKey(log),
+    title: log.action || "System update",
+    message: buildNotificationMessage(log),
+    userId: log.userId || "system",
+    targetId: log.targetId || "",
+    createdAt: log.createdAt || "",
+    ts: log.ts || log.createdAt || "",
+    meta: log.meta || {},
+  };
+}
+
+const PAYMENT_NOTIFICATION_TITLES = new Set([
+  "Updated payment status",
+  "Submitted payment proof",
+  "Updated payment proof",
+  "Updated payment method",
+  "Updated payment",
+  "Payment details requested",
+]);
+
+const STOCK_NOTIFICATION_TITLES = new Set([
+  "Created stock monitoring item",
+  "Updated stock monitoring item",
+  "Restocked stock monitoring item",
+  "Deleted stock monitoring item",
+]);
+
+const BOOKING_NOTIFICATION_TITLES = new Set([
+  "Created booking",
+  "Updated booking status",
+]);
+
+const TRACKING_NOTIFICATION_TITLES = new Set([
+  "Updated service tracking",
+]);
+
+function isPaymentNotification(item) {
+  return PAYMENT_NOTIFICATION_TITLES.has(item.title);
+}
+
+function isStockNotification(item) {
+  return STOCK_NOTIFICATION_TITLES.has(item.title);
+}
+
+function isBookingStatusNotification(item) {
+  return BOOKING_NOTIFICATION_TITLES.has(item.title);
+}
+
+function isTrackingNotification(item) {
+  return TRACKING_NOTIFICATION_TITLES.has(item.title);
+}
+
+function isEssentialNotification(item) {
+  return (
+    isPaymentNotification(item) ||
+    isStockNotification(item) ||
+    isBookingStatusNotification(item) ||
+    isTrackingNotification(item)
+  );
+}
+
+function isCustomerRelatedNotification(item, email, fullName) {
+  return (
+    String(item.userId || "").trim().toLowerCase() === email ||
+    String(item.meta?.email || "").trim().toLowerCase() === email ||
+    String(item.meta?.customerEmail || "").trim().toLowerCase() === email ||
+    String(item.meta?.clientEmail || "").trim().toLowerCase() === email ||
+    String(item.meta?.customer || "").trim().toLowerCase() === fullName ||
+    String(item.meta?.client || "").trim().toLowerCase() === fullName
+  );
+}
+
+function isSelfAuthoredNotification(item, email, fullName) {
+  const actor = String(item.userId || "").trim().toLowerCase();
+  if (!actor) return false;
+  if (email && actor === email) return true;
+  if (fullName && actor === fullName) return true;
+  return false;
+}
+
+function mapAlertsToNotifications(alerts, role) {
+  if (role === "client") return [];
+
+  return (alerts || [])
+    .filter((alert) => String(alert.title || "").toLowerCase().includes("low stock"))
+    .map((alert, index) => ({
+      id: `alert-low-stock-${index}-${String(alert.description || "").trim()}`,
+      title: alert.title || "Stock alert",
+      message: alert.description || "Stock monitoring needs attention.",
+      userId: "system",
+      targetId: "stock-monitoring",
+      createdAt: "",
+      ts: "System alert",
+      meta: { type: "stock-alert" },
+    }));
+}
+
+function filterNotificationsForUser(auditLogs, alerts, currentUser) {
+  const role = normalizeRole(currentUser?.userType, currentUser?.role);
+  const email = String(currentUser?.email || "").trim().toLowerCase();
+  const fullName = String(currentUser?.name || "").trim().toLowerCase();
+
+  const essentialAuditNotifications = auditLogs
+    .map(mapAuditLogToNotification)
+    .filter((item) => {
+      if (!isEssentialNotification(item)) {
+        return false;
+      }
+
+      if (isSelfAuthoredNotification(item, email, fullName)) {
+        return false;
+      }
+
+      if (role === "admin" || role === "staff") {
+        return true;
+      }
+
+      if (isStockNotification(item)) {
+        return false;
+      }
+
+      return isCustomerRelatedNotification(item, email, fullName);
+    })
+    .slice(0, 20);
+
+  return [...mapAlertsToNotifications(alerts, role), ...essentialAuditNotifications].slice(0, 20);
+}
+
+function decorateNotificationsWithUnread(items, lastReadNotificationId) {
+  if (!items.length) return [];
+
+  let unreadUntilIndex = 0;
+  if (lastReadNotificationId) {
+    const readIndex = items.findIndex((item) => item.id === lastReadNotificationId);
+    unreadUntilIndex = readIndex === -1 ? items.length : readIndex;
+  }
+
+  return items.map((item, index) => ({
+    ...item,
+    isUnread: index < unreadUntilIndex,
+  }));
+}
+
 function normalizeBootstrapPayload(payload) {
   const nextPayload = payload && typeof payload === "object" ? payload : {};
   const inventory = Array.isArray(nextPayload.inventory)
@@ -51,12 +235,167 @@ function normalizeBootstrapPayload(payload) {
     : Array.isArray(nextPayload.stockMonitoring)
       ? nextPayload.stockMonitoring
       : [];
+  const rewards = Array.isArray(nextPayload.rewards)
+    ? nextPayload.rewards.map(normalizeRewardRecord)
+    : [];
+  const customerRewards = Array.isArray(nextPayload.customerRewards)
+    ? nextPayload.customerRewards.map(normalizeRewardRecord)
+    : [];
 
   return {
     ...INITIAL_DATA,
     ...nextPayload,
     inventory,
+    rewards,
+    customerRewards,
     stockMonitoring: inventory,
+  };
+}
+
+function normalizeRewardRecord(reward) {
+  const nextReward = reward && typeof reward === "object" ? reward : {};
+  const rewardName = String(
+    nextReward.rewardName || nextReward.name || nextReward.title || ""
+  ).trim();
+  const rewardValue = String(
+    nextReward.rewardValue || nextReward.value || nextReward.description || ""
+  ).trim();
+  const derivedStatus = typeof nextReward.active === "boolean"
+    ? (nextReward.active ? "Active" : "Disabled")
+    : "";
+
+  return {
+    ...nextReward,
+    id: nextReward.id || nextReward._id || nextReward.rewardId || "",
+    title: nextReward.title || rewardName,
+    name: nextReward.name || rewardName,
+    rewardName,
+    value: nextReward.value || rewardValue,
+    rewardValue,
+    description: nextReward.description || rewardValue,
+    status: nextReward.status || derivedStatus,
+  };
+}
+
+// Web utils from AutoFlow-main (invoice, rewards, status)
+const SALES_TAX_RATE = 0.12;
+
+export function formatDate(dateStr) {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return String(dateStr || "-");
+  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+export function formatCurrency(value) {
+  return `P ${Number(value || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+export function statusMeta(status) {
+  const s = String(status || "").toLowerCase();
+  if (s.includes("paid")) return { cls: "paid", label: "Paid" };
+  if (s.includes("verification")) return { cls: "review", label: "For Verification" };
+  if (s.includes("reject")) return { cls: "rejected", label: "Rejected" };
+  return { cls: "pending", label: status || "Pending" };
+}
+
+export function normalizeStageStatus(status, fallback = "Pending") {
+  const raw = String(status || "").trim();
+  return raw || fallback;
+}
+
+export function getPaymentTotal(payment) {
+  return Number(payment?.finalAmount || payment?.amount || 0);
+}
+
+export function getAmountPaid(payment) {
+  const downPaymentPaid =
+    String(payment?.downPaymentStatus || "").trim().toLowerCase() === "paid"
+      ? Number(payment?.downPaymentAmount || 0)
+      : 0;
+  const fullPaymentPaid =
+    String(payment?.finalPaymentStatus || payment?.status || "").trim().toLowerCase() === "paid"
+      ? Math.max(0, getPaymentTotal(payment) - downPaymentPaid)
+      : 0;
+  return downPaymentPaid + fullPaymentPaid;
+}
+
+export function getRemainingBalance(payment) {
+  return Math.max(0, getPaymentTotal(payment) - getAmountPaid(payment));
+}
+
+export function getPaymentStageLabel(payment = {}) {
+  const nextPayment = payment && typeof payment === "object" ? payment : {};
+  const legacyStatus = normalizeStageStatus(nextPayment.status, "Pending");
+  const downPaymentStatus = normalizeStageStatus(
+    nextPayment.downPaymentStatus,
+    nextPayment.downPaymentRequired === false ? "Not Required" : "Pending"
+  );
+  const finalPaymentStatus = normalizeStageStatus(nextPayment.finalPaymentStatus, legacyStatus);
+
+  if (nextPayment.autoCancelledForNoDownPaymentProof) return "Cancelled";
+  if (finalPaymentStatus === "Paid" || legacyStatus === "Paid") return "Paid";
+  if (finalPaymentStatus === "For Verification") return "Full Payment For Verification";
+  if (finalPaymentStatus === "Rejected") return "Rejected";
+  if (nextPayment.downPaymentRequired === true && downPaymentStatus === "Paid") return "DP Paid / Balance Pending";
+  if (nextPayment.downPaymentRequired === true && downPaymentStatus === "For Verification") return "DP For Verification";
+  if (nextPayment.downPaymentRequired === true && downPaymentStatus === "Rejected") return "DP Rejected";
+  if (nextPayment.downPaymentRequired === true) return "DP Pending";
+  if (finalPaymentStatus === "Pending") return "Balance Pending";
+  return legacyStatus;
+}
+
+export function getInvoiceBreakdown(payment) {
+  const total = Number(payment?.amount || 0);
+  const originalTotal = Number(payment?.originalAmount || total);
+  const promoDiscount = Number(payment?.promoDiscountAmount || 0);
+  const rewardDiscount = Number(payment?.discountAmount || payment?.rewardDiscountAmount || 0);
+  const originalSubtotal = Math.round((originalTotal / (1 + SALES_TAX_RATE)) * 100) / 100;
+  const subtotal = Number(payment?.subtotalAfterDiscount || 0) || Math.round((total / (1 + SALES_TAX_RATE)) * 100) / 100;
+  const tax = Number(payment?.taxAmount || 0) || Math.round((total - subtotal) * 100) / 100;
+  const finalAmount = Number(payment?.finalAmount || 0) || total;
+
+  return { originalTotal, promoDiscount, rewardDiscount, subtotal, tax, total: finalAmount };
+}
+
+export function isRewardExpired(reward) {
+  const expirationDate = String(reward?.expirationDate || "").trim();
+  if (!expirationDate) return false;
+  return new Date(expirationDate) < new Date();
+}
+
+export function isRewardUsable(reward) {
+  return String(reward?.status || "").trim().toLowerCase() === "unused" && !isRewardExpired(reward);
+}
+
+export function getUsableCustomerRewards(customerRewards, currentUser, matchFn = matchUserScopedRecord) {
+  const customerRewardsFiltered = customerRewards.filter((r) => matchFn(r, currentUser));
+  return customerRewardsFiltered.filter(isRewardUsable);
+}
+
+export function parseRewardDiscount(value, amount) {
+  const raw = String(value || "").trim();
+  const baseAmount = Math.max(0, Number(amount || 0));
+  if (!raw || baseAmount <= 0) return 0;
+
+  const percentMatch = raw.match(/(\d+(?:\.\d+)?)\s*%/);
+  if (percentMatch) {
+    const percent = Math.min(100, Math.max(0, Number(percentMatch[1]) || 0));
+    return Math.min(baseAmount, Number(((baseAmount * percent) / 100).toFixed(2)));
+  }
+
+  const fixedMatch = raw.replace(/,/g, "").match(/(?:php|p|₱)?\s*(\d+(?:\.\d+)?)/i);
+  if (fixedMatch && /discount|off|php|₱|p\s*\d/i.test(raw)) {
+    return Math.min(baseAmount, Number((Number(fixedMatch[1]) || 0).toFixed(2)));
+  }
+
+  return 0;
+}
+
+export function getRewardPreview(reward, amount) {
+  const discountAmount = parseRewardDiscount(reward?.rewardValue, amount);
+  return {
+    discountAmount,
+    finalAmount: Math.max(0, Number((Number(amount || 0) - discountAmount).toFixed(2))),
   };
 }
 
@@ -76,6 +415,27 @@ function matchUserScopedRecord(record, currentUser) {
   );
 }
 
+function requestFinancialInterpretation(payload) {
+  return apiRequest("/api/admin/financials/interpretation", {
+    method: "POST",
+    body: JSON.stringify(payload || {}),
+  });
+}
+
+function requestAnalyticsInterpretation(payload) {
+  return apiRequest("/api/ai/analytics/interpret", {
+    method: "POST",
+    body: JSON.stringify(payload || {}),
+  });
+}
+
+function requestTrackingIssueNote(payload) {
+  return apiRequest("/api/ai/tracking/issue-note", {
+    method: "POST",
+    body: JSON.stringify(payload || {}),
+  });
+}
+
 export function MobileDataProvider({ session, onSessionChange, children }) {
   const [data, setData] = useState(INITIAL_DATA);
   const [loading, setLoading] = useState(false);
@@ -86,8 +446,17 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
   const syncInFlightRef = useRef(false);
   const loadDataRef = useRef(null);
   const appStateRef = useRef(AppState.currentState);
+  const notificationsBootstrappedRef = useRef(false);
+  const previousNotificationIdsRef = useRef([]);
 
   const role = normalizeRole(session?.userType, session?.role);
+  const notificationStorageKey = useMemo(
+    () => `autoflow:last-read-notification:${String(session?.email || role || "guest").toLowerCase()}`,
+    [session?.email, role]
+  );
+  const [lastReadNotificationId, setLastReadNotificationId] = useState(
+    readStoredNotificationId(notificationStorageKey)
+  );
 
   const loadData = async ({ silent = false } = {}) => {
     if (!session?.email) return;
@@ -102,6 +471,10 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
       setConnected(true);
       setLastSyncedAt(new Date().toISOString());
     } catch (err) {
+      if (Number(err?.statusCode || 0) === 401) {
+        onSessionChange?.(null);
+        return;
+      }
       if (!silent) {
         setData(INITIAL_DATA);
       }
@@ -117,6 +490,12 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
   useEffect(() => {
     loadDataRef.current = loadData;
   });
+
+  useEffect(() => {
+    setLastReadNotificationId(readStoredNotificationId(notificationStorageKey));
+    notificationsBootstrappedRef.current = false;
+    previousNotificationIdsRef.current = [];
+  }, [notificationStorageKey]);
 
   useEffect(() => {
     if (!session?.email) {
@@ -229,6 +608,13 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
     return data.reviews;
   }, [data.reviews, role, currentUser]);
 
+  const scopedRewards = useMemo(() => {
+    if (role === "client") {
+      return getUsableCustomerRewards(data.customerRewards || [], currentUser);
+    }
+    return data.rewards || [];
+  }, [data.customerRewards, data.rewards, role, currentUser]);
+
   const auditLogs = useMemo(
     () =>
       data.auditLogs.map((log) => ({
@@ -239,36 +625,37 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
   );
 
   const visibleNotifications = useMemo(() => {
-    const activeLogs = auditLogs.filter((item) => !item.isArchived);
-    if (role === "admin") return activeLogs.slice(0, 20);
-    if (role === "staff") {
-      return activeLogs
-        .filter(
-          (item) =>
-            ![
-              "Updated user",
-              "Deleted user",
-              "Activated user",
-              "Deactivated user",
-              "Updated user password",
-              "Cleared audit logs",
-            ].includes(item.action)
-        )
-        .slice(0, 20);
+    const items = filterNotificationsForUser(auditLogs, data.alerts || [], currentUser);
+    return decorateNotificationsWithUnread(items, lastReadNotificationId);
+  }, [auditLogs, data.alerts, currentUser, lastReadNotificationId]);
+
+  const unreadNotificationCount = useMemo(() => {
+    if (!visibleNotifications.length) return 0;
+    if (!lastReadNotificationId) return 0;
+    const readIndex = visibleNotifications.findIndex((item) => item.id === lastReadNotificationId);
+    if (readIndex === -1) return visibleNotifications.length;
+    return readIndex;
+  }, [visibleNotifications, lastReadNotificationId]);
+
+  useEffect(() => {
+    if (!visibleNotifications.length) return;
+
+    const currentIds = visibleNotifications.map((item) => item.id);
+    if (!notificationsBootstrappedRef.current) {
+      notificationsBootstrappedRef.current = true;
+      previousNotificationIdsRef.current = currentIds;
+      if (!readStoredNotificationId(notificationStorageKey)) {
+        const newestId = visibleNotifications[0]?.id || "";
+        if (newestId) {
+          writeStoredNotificationId(notificationStorageKey, newestId);
+          setLastReadNotificationId(newestId);
+        }
+      }
+      return;
     }
 
-    return activeLogs
-      .filter((item) => {
-        const meta = item.meta || {};
-        return (
-          normalizeName(item.userId) === normalizeName(currentUser?.email) ||
-          normalizeName(meta.email) === normalizeName(currentUser?.email) ||
-          normalizeName(meta.customerEmail) === normalizeName(currentUser?.email) ||
-          normalizeName(meta.clientEmail) === normalizeName(currentUser?.email)
-        );
-      })
-      .slice(0, 20);
-  }, [auditLogs, role, currentUser]);
+    previousNotificationIdsRef.current = currentIds;
+  }, [visibleNotifications, notificationStorageKey]);
 
   const mutate = async (path, options = {}) => {
     const result = await apiRequest(path, options);
@@ -311,9 +698,39 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
     reload: loadData,
     currentUser,
     notifications: visibleNotifications,
+    unreadNotificationCount,
+    markNotificationsRead: () => {
+      const newestId = visibleNotifications[0]?.id || "";
+      if (!newestId) return;
+      writeStoredNotificationId(notificationStorageKey, newestId);
+      setLastReadNotificationId(newestId);
+    },
     scopedBookings,
     scopedPayments,
     scopedReviews,
+    scopedRewards,
+    // Exposed utils
+    formatDate,
+    formatCurrency,
+    statusMeta,
+    normalizeStageStatus,
+    getPaymentTotal,
+    getAmountPaid,
+    getRemainingBalance,
+    getPaymentStageLabel,
+    getInvoiceBreakdown,
+    getUsableCustomerRewards,
+    parseRewardDiscount,
+    getRewardPreview,
+    generateAnalyticsInterpretation: requestAnalyticsInterpretation,
+    generateFinancialInterpretation: requestFinancialInterpretation,
+    generateTrackingIssueNote: requestTrackingIssueNote,
+    // OTP functions (signup/password only)
+    requestSignupOtp,
+    verifySignupOtp,
+    requestPasswordOtp,
+    verifyPasswordOtp,
+    resetPasswordWithOtp,
     createBooking: (payload) =>
       mutate("/api/admin/bookings", {
         method: "POST",
@@ -324,6 +741,11 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
         method: "PUT",
         body: JSON.stringify({ ...payload, auditUser }),
       }),
+    reassignDetailer: (id, payload) =>
+      mutate(`/api/admin/bookings/${id}/reassign-detailer`, {
+        method: "PATCH",
+        body: JSON.stringify({ ...payload, auditUser }),
+      }),
     deleteBooking: (id) =>
       mutate(`/api/admin/bookings/${id}?auditUser=${encodeURIComponent(auditUser)}`, {
         method: "DELETE",
@@ -331,19 +753,44 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
     updatePayment: (id, payload) =>
       mutate(`/api/admin/payments/${id}`, {
         method: "PUT",
-        body: JSON.stringify({ ...payload, auditUser }),
+        body: JSON.stringify((() => {
+          const reviewedAt = new Date().toISOString();
+          const nextPayload = { ...payload, auditUser };
+          if (payload?.downPaymentStatus === "Paid" || payload?.downPaymentStatus === "Rejected") {
+            nextPayload.downPaymentReviewedAt = payload.downPaymentReviewedAt || reviewedAt;
+          }
+          if (payload?.finalPaymentStatus === "Paid" || payload?.finalPaymentStatus === "Rejected") {
+            nextPayload.finalPaymentReviewedAt = payload.finalPaymentReviewedAt || reviewedAt;
+          }
+          if (payload?.status === "Paid" || payload?.status === "Rejected") {
+            nextPayload.paymentReviewedAt = payload.paymentReviewedAt || reviewedAt;
+          }
+          return nextPayload;
+        })()),
       }),
-    submitPaymentProof: (payment, payload) =>
-      mutate(`/api/admin/payments/${payment.id}`, {
+    submitPaymentProof: async (payment, payload) => {
+      const nextStatus = String(
+        payload?.finalPaymentStatus ||
+          payload?.downPaymentStatus ||
+          payload?.status ||
+          payment?.status ||
+          "For Verification"
+      ).trim();
+      const submittedAt = new Date().toISOString();
+      const isFinalPaymentSubmission = payload?.finalPaymentStatus === "For Verification";
+      const isDownPaymentSubmission = payload?.downPaymentStatus === "For Verification";
+      return mutate(`/api/admin/payments/${payment.id}`, {
         method: "PUT",
         body: JSON.stringify({
-          ...payment,
+          status: nextStatus,
           ...payload,
-          status: "For Verification",
-          proofSubmittedAt: new Date().toISOString(),
+          proofSubmittedAt: submittedAt,
+          ...(isDownPaymentSubmission ? { downPaymentProofSubmittedAt: submittedAt } : {}),
+          ...(isFinalPaymentSubmission ? { finalPaymentProofSubmittedAt: submittedAt } : {}),
           auditUser,
         }),
-      }),
+      });
+    },
     createService: (payload) =>
       mutate("/api/admin/services", {
         method: "POST",
@@ -391,12 +838,55 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
 
       return result;
     },
+    updateOwnPassword: async ({ password, verificationId, otp }) => {
+      await resetPasswordWithOtp({
+        email: currentUser.email || session?.email,
+        verificationId,
+        otp,
+        password,
+        purpose: "change-password",
+      });
+    },
     updateProfile: async (payload) => {
+      const {
+        password,
+        passwordOtpVerificationId,
+        passwordOtpCode,
+        ...profilePayload
+      } = payload || {};
+
+      if (password) {
+        await resetPasswordWithOtp({
+          email: currentUser.email || session?.email,
+          verificationId: passwordOtpVerificationId,
+          otp: passwordOtpCode,
+          password,
+          purpose: "change-password",
+        });
+      }
+
+      const accountRole = normalizeRole(
+        currentUser.userType || session?.userType,
+        currentUser.role || session?.role
+      );
+      const accountType = accountRole === "admin" ? "Admin" : accountRole === "staff" ? "Staff" : "Client";
+      const {
+        password: _currentPassword,
+        confirmPassword: _currentConfirmPassword,
+        passwordHash: _currentPasswordHash,
+        passwordSalt: _currentPasswordSalt,
+        passwordOtpVerificationId: _currentPasswordOtpVerificationId,
+        passwordOtpCode: _currentPasswordOtpCode,
+        ...safeCurrentUser
+      } = currentUser || {};
+
       const updatedUser = await mutate(`/api/admin/users/${currentUser.id}`, {
         method: "PUT",
         body: JSON.stringify({
-          ...currentUser,
-          ...payload,
+          ...safeCurrentUser,
+          ...profilePayload,
+          userType: accountType,
+          role: accountType,
           auditUser,
         }),
       });
@@ -418,6 +908,21 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
     createReview: (payload) =>
       mutate("/api/admin/reviews", {
         method: "POST",
+        body: JSON.stringify({ ...payload, auditUser }),
+      }),
+    createExpense: (payload) =>
+      mutate("/api/admin/expenses", {
+        method: "POST",
+        body: JSON.stringify({ ...payload, auditUser }),
+      }),
+    updateCommission: (id, payload) =>
+      mutate(`/api/admin/commissions/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ ...payload, auditUser }),
+      }),
+    updateQuoteRequest: (id, payload) =>
+      mutate(`/api/admin/quote-requests/${id}`, {
+        method: "PUT",
         body: JSON.stringify({ ...payload, auditUser }),
       }),
     archiveAuditLogs: async (ids = []) => {
@@ -480,6 +985,27 @@ export async function requestSignupOtp(payload) {
 
 export async function verifySignupOtp(payload) {
   return apiRequest("/api/auth/signup/verify-otp", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function requestPasswordOtp(payload) {
+  return apiRequest("/api/auth/password-change/request-otp", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function verifyPasswordOtp(payload) {
+  return apiRequest("/api/auth/password-change/verify-otp", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function resetPasswordWithOtp(payload) {
+  return apiRequest("/api/auth/password-change/reset", {
     method: "POST",
     body: JSON.stringify(payload),
   });

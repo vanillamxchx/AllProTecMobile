@@ -10,7 +10,13 @@ import {
 } from "react-native";
 
 import styles from "../../styles/css/staff/staffProfileStyles";
-import { useMobileData } from "../../context/MobileDataContext.jsx";
+import OtpEmailConfirmModal from "../../components/common/OtpEmailConfirmModal.jsx";
+import OtpCodeModal from "../../components/common/OtpCodeModal.jsx";
+import {
+  requestPasswordOtp,
+  useMobileData,
+  verifyPasswordOtp,
+} from "../../context/MobileDataContext.jsx";
 
 function Field({
   label,
@@ -67,14 +73,15 @@ function PasswordField({
           selectTextOnFocus={editable}
         />
 
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={onToggle}
-          style={styles.showBtn}
-          disabled={!editable}
-        >
-          <Text style={styles.showTxt}>{show ? "Hide" : "Show"}</Text>
-        </TouchableOpacity>
+        {editable ? (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={onToggle}
+            style={styles.showBtn}
+          >
+            <Text style={styles.showTxt}>{show ? "Hide" : "Show"}</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {!!error && <Text style={styles.errorTxt}>{error}</Text>}
@@ -83,7 +90,8 @@ function PasswordField({
 }
 
 export default function StaffProfile({ session }) {
-  const { currentUser, updateProfile } = useMobileData();
+  const { currentUser, updateProfile, updateOwnPassword } = useMobileData();
+  const accountEmail = String(currentUser?.email || session?.email || "").trim().toLowerCase();
   const initial = useMemo(() => {
     const first = currentUser?.first || session?.first || session?.firstName || "";
     const last = currentUser?.last || session?.last || session?.lastName || "";
@@ -101,6 +109,15 @@ export default function StaffProfile({ session }) {
   const [confirmPass, setConfirmPass] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
+  const [otpRequestVisible, setOtpRequestVisible] = useState(false);
+  const [otpModalVisible, setOtpModalVisible] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpError, setOtpError] = useState("");
+  const [otpRequestError, setOtpRequestError] = useState("");
+  const [otpBusy, setOtpBusy] = useState(false);
+  const [otpVerificationId, setOtpVerificationId] = useState("");
+  const [otpDestination, setOtpDestination] = useState("");
+  const [pendingPayload, setPendingPayload] = useState(null);
 
   const [isEditing, setIsEditing] = useState(false);
   const [snapshot, setSnapshot] = useState(initial);
@@ -225,6 +242,134 @@ export default function StaffProfile({ session }) {
     setIsEditing(false);
   };
 
+  const closeOtpModal = () => {
+    if (otpBusy) return;
+    setOtpModalVisible(false);
+    setOtpCode("");
+    setOtpError("");
+    setOtpVerificationId("");
+    setOtpDestination("");
+    setPendingPayload(null);
+  };
+
+  const closeOtpRequestModal = () => {
+    if (otpBusy) return;
+    setOtpRequestVisible(false);
+    setOtpRequestError("");
+    setOtpVerificationId("");
+    setOtpDestination("");
+    setPendingPayload(null);
+  };
+
+  const finishSave = (payload) => {
+    updateProfile(payload)
+      .then(() => {
+        Alert.alert("Saved", "Account details updated.");
+        setIsEditing(false);
+        setPass("");
+        setConfirmPass("");
+        setShowPass(false);
+        setShowConfirmPass(false);
+        setTouched({
+          first: false,
+          last: false,
+          email: false,
+          phone: false,
+          pass: false,
+          confirmPass: false,
+        });
+        closeOtpModal();
+      })
+      .catch((error) => {
+        Alert.alert("Save failed", error.message || "Could not update account details.");
+      });
+  };
+
+  const sendPasswordOtp = (payload, { resend = false } = {}) => {
+    setPendingPayload(payload);
+    setOtpVerificationId("");
+    setOtpDestination(accountEmail);
+    if (resend) {
+      setOtpError("");
+    } else {
+      setOtpCode("");
+      setOtpError("");
+      setOtpRequestError("");
+    }
+    setOtpBusy(true);
+    requestPasswordOtp({
+      email: accountEmail,
+      purpose: "change-password",
+      channel: "email",
+    })
+      .then((result) => {
+        setOtpVerificationId(result.verificationId || "");
+        setOtpDestination(result.destination || accountEmail);
+        setOtpError("");
+        if (!resend) {
+          setOtpRequestVisible(false);
+        }
+        setOtpModalVisible(true);
+      })
+      .catch((error) => {
+        setOtpVerificationId("");
+        if (resend) {
+          setOtpError(error.message || "Could not send the security code.");
+        } else {
+          setOtpRequestError(error.message || "Could not send the security code.");
+        }
+      })
+      .finally(() => {
+        setOtpBusy(false);
+      });
+  };
+
+  const confirmPasswordOtp = () => {
+    const code = clean(otpCode);
+    if (!code) {
+      setOtpError("OTP code is required.");
+      return;
+    }
+
+    setOtpBusy(true);
+    verifyPasswordOtp({
+      email: accountEmail,
+      verificationId: otpVerificationId,
+      otp: code,
+      purpose: "change-password",
+    })
+      .then(() =>
+        updateOwnPassword?.({
+          password: pendingPayload?.password,
+          verificationId: otpVerificationId,
+          otp: code,
+        })
+      )
+      .then(() => {
+        Alert.alert("Password updated", "Password updated successfully.");
+        setIsEditing(false);
+        setPass("");
+        setConfirmPass("");
+        setShowPass(false);
+        setShowConfirmPass(false);
+        setTouched({
+          first: false,
+          last: false,
+          email: false,
+          phone: false,
+          pass: false,
+          confirmPass: false,
+        });
+        closeOtpModal();
+      })
+      .catch((error) => {
+        setOtpError(error.message || "Invalid code. Try again.");
+      })
+      .finally(() => {
+        setOtpBusy(false);
+      });
+  };
+
   const onSave = () => {
     if (!isEditing) {
       setSnapshot({ first, last, email, phone });
@@ -268,26 +413,14 @@ export default function StaffProfile({ session }) {
         return Alert.alert("Mismatch", "Passwords do not match.");
     }
 
-    updateProfile(payload)
-      .then(() => {
-        Alert.alert("Saved", "Account details updated.");
-        setIsEditing(false);
-        setPass("");
-        setConfirmPass("");
-        setShowPass(false);
-        setShowConfirmPass(false);
-        setTouched({
-          first: false,
-          last: false,
-          email: false,
-          phone: false,
-          pass: false,
-          confirmPass: false,
-        });
-      })
-      .catch((error) => {
-        Alert.alert("Save failed", error.message || "Could not update account details.");
-      });
+    if (payload.password) {
+      setPendingPayload(payload);
+      setOtpRequestError("");
+      setOtpRequestVisible(true);
+      return;
+    }
+
+    finishSave(payload);
   };
 
   return (
@@ -362,12 +495,12 @@ export default function StaffProfile({ session }) {
 
         <PasswordField
           label="Password"
-          value={pass}
+          value={isEditing ? pass : "••••••••"}
           onChangeText={(v) => {
             setPass(v);
             if (isEditing) setTouched((t) => ({ ...t, pass: true }));
           }}
-          placeholder="Enter your password"
+          placeholder={isEditing ? "Enter your password" : ""}
           show={showPass}
           onToggle={() => setShowPass((s) => !s)}
           editable={isEditing}
@@ -404,6 +537,32 @@ export default function StaffProfile({ session }) {
       </View>
 
       <View style={{ height: 26 }} />
+      <OtpEmailConfirmModal
+        visible={otpRequestVisible}
+        title="Verify Email"
+        subtitle="We will send a security code to verify your email."
+        email={accountEmail}
+        error={otpRequestError}
+        busy={otpBusy}
+        onClose={closeOtpRequestModal}
+        onConfirm={() => pendingPayload && sendPasswordOtp(pendingPayload)}
+      />
+      <OtpCodeModal
+        visible={otpModalVisible}
+        title="Enter Security Code"
+        subtitle={`Please check ${otpDestination || accountEmail || "your email"} for a message with your code.`}
+        value={otpCode}
+        error={otpError}
+        busy={otpBusy}
+        confirmEnabled={Boolean(otpVerificationId)}
+        onChangeText={(value) => {
+          setOtpCode(value.replace(/[^\d]/g, "").slice(0, 6));
+          if (otpError) setOtpError("");
+        }}
+        onClose={closeOtpModal}
+        onConfirm={confirmPasswordOtp}
+        onResend={() => pendingPayload && sendPasswordOtp(pendingPayload, { resend: true })}
+      />
     </ScrollView>
   );
 }

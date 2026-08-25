@@ -302,6 +302,11 @@ export default StyleSheet.create({
     alignSelf: "flex-start",
   },
 
+  inlineLinks: {
+    alignItems: "flex-start",
+    gap: 6,
+  },
+
   linkTxt: {
     fontSize: 12,
     fontWeight: "900",
@@ -456,6 +461,73 @@ export default StyleSheet.create({
     fontWeight: "900",
     color: TEXT,
     textDecorationLine: "underline",
+  },
+
+  secondaryBtn: {
+    marginTop: 10,
+    minHeight: 42,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: BG,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+
+  secondaryBtnTxt: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: TEXT,
+    textAlign: "center",
+  },
+
+  apiHint: {
+    marginTop: 8,
+    fontSize: 11,
+    fontWeight: "700",
+    color: SUB,
+    lineHeight: 16,
+  },
+
+  apiQuickRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    gap: 8,
+  },
+
+  apiQuickBtn: {
+    flex: 1,
+    minHeight: 40,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: GOLD_FAINT,
+    borderWidth: 1,
+    borderColor: GOLD_SOFT,
+  },
+
+  apiQuickBtnTxt: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: TEXT,
+    textAlign: "center",
+  },
+
+  apiStatus: {
+    marginTop: 10,
+    fontSize: 12,
+    fontWeight: "800",
+    lineHeight: 18,
+  },
+
+  apiStatusSuccess: {
+    color: "#166534",
+  },
+
+  apiStatusError: {
+    color: "#B91C1C",
   },
 
   rulesBox: {

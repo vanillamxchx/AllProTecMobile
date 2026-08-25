@@ -19,11 +19,16 @@ import AdminEngagement from "./AdminEngagement.jsx";
 import AdminUsersOverview from "./AdminUsersOverview.jsx";
 import AdminAuditLogs from "./AdminAuditLogs.jsx";
 import AdminProfile from "./AdminProfile.jsx";
+import AdminDetailerManagement from "./AdminDetailerManagement.jsx";
 
 import BookingModal from "../modals/BookingModal.jsx";
+import NotificationCenterModal from "../../components/common/NotificationCenterModal.jsx";
+import { useMobileData } from "../../context/MobileDataContext.jsx";
 
 export default function AdminMain({ session, onLogout }) {
+  const { notifications, unreadNotificationCount, markNotificationsRead, loading } = useMobileData();
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [module, setModule] = useState(null);
 
   const [bookingModalOpen, setBookingModalOpen] = useState(false);
@@ -64,6 +69,7 @@ export default function AdminMain({ session, onLogout }) {
     if (module === "engagement") return <AdminEngagement onBack={closeModule} />;
     if (module === "users") return <AdminUsersOverview onBack={closeModule} />;
     if (module === "audit") return <AdminAuditLogs onBack={closeModule} />;
+    if (module === "detailer-management") return <AdminDetailerManagement onBack={closeModule} />;
 
     // ✅ FIX: pass session to AdminProfile
     if (module === "profile")
@@ -82,7 +88,8 @@ export default function AdminMain({ session, onLogout }) {
         <AppHeader
           role="admin"
           name={session?.name || "A"}
-          onBell={() => console.log("ADMIN: bell")}
+          onBell={() => setNotificationsOpen(true)}
+          unreadCount={unreadNotificationCount}
           onProfile={() => openModule("profile")}
           onLogout={onLogout}
         />
@@ -95,6 +102,15 @@ export default function AdminMain({ session, onLogout }) {
             setActiveTab(key);
             setModule(null);
           }}
+        />
+
+        <NotificationCenterModal
+          open={notificationsOpen}
+          onClose={() => setNotificationsOpen(false)}
+          notifications={notifications}
+          unreadCount={unreadNotificationCount}
+          loading={loading}
+          onMarkRead={markNotificationsRead}
         />
 
         <BookingModal

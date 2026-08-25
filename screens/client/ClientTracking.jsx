@@ -13,16 +13,31 @@ import styles from "../../styles/css/client/clientTrackingStyles";
 import TrackingModal from "../modals/TrackingModal";
 import { useMobileData } from "../../context/MobileDataContext.jsx";
 import MobileFilterModal from "../../components/common/MobileFilterModal.jsx";
+import { getTrackingStatusMeta } from "../../services/trackingStatus";
 
 const ICON_SEARCH = require("../../styles/icons/search.png");
 const ICON_FILTER = require("../../styles/icons/filter.png");
 
 const statusMeta = (status) => {
-  const s = String(status || "").toLowerCase();
-  if (s.includes("progress")) return { pill: styles.pillBlue, text: styles.pillBlueText, label: "In Progress" };
-  if (s.includes("complete")) return { pill: styles.pillGreen, text: styles.pillGreenText, label: "Complete" };
-  if (s.includes("arriv")) return { pill: styles.pillYellow, text: styles.pillYellowText, label: "Arrived" };
-  return { pill: styles.pillOrange, text: styles.pillOrangeText, label: "Booked" };
+  const meta = getTrackingStatusMeta(status);
+
+  if (meta.key === "inProgress") {
+    return { pill: styles.pillBlue, text: styles.pillBlueText, label: meta.label };
+  }
+
+  if (meta.key === "completed") {
+    return { pill: styles.pillGreen, text: styles.pillGreenText, label: meta.label };
+  }
+
+  if (meta.key === "arrived") {
+    return { pill: styles.pillYellow, text: styles.pillYellowText, label: meta.label };
+  }
+
+  if (meta.key === "scheduled" || meta.key === "confirmed") {
+    return { pill: styles.pillOrange, text: styles.pillOrangeText, label: meta.label };
+  }
+
+  return { pill: styles.pillGray, text: styles.pillGrayText, label: meta.label };
 };
 
 export default function ClientTracking() {
@@ -116,12 +131,8 @@ export default function ClientTracking() {
                     <View style={styles.tdAct}>
                       <TouchableOpacity activeOpacity={0.9} style={styles.viewBtn} onPress={() => {
                         setSelected({
-                          id: booking.id,
-                          date: booking.date,
-                          customer: booking.customer,
+                          ...booking,
                           vehicleModel: booking.vehicle,
-                          service: booking.service,
-                          status: booking.status,
                           assignedTo: booking.assigned || "-",
                         });
                         setModalOpen(true);

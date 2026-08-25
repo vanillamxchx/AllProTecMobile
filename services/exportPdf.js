@@ -162,7 +162,11 @@ export async function exportTabularPdf({ title, subtitle = "", sections = [] }) 
       return;
     }
 
-    const file = await Print.printToFileAsync({ html });
+    const file = await Print.printToFileAsync({
+      html,
+      width: 612,
+      height: 792,
+    });
 
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(file.uri, {

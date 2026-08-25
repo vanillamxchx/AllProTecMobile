@@ -13,6 +13,7 @@ import styles from "../../styles/css/staff/staffTrackingStyles";
 import TrackingModal from "../modals/TrackingModal";
 import { useMobileData } from "../../context/MobileDataContext.jsx";
 import MobileFilterModal from "../../components/common/MobileFilterModal.jsx";
+import { getTrackingStatusMeta } from "../../services/trackingStatus";
 
 const ICON_SEARCH = require("../../styles/icons/search.png");
 const ICON_FILTER = require("../../styles/icons/filter.png");
@@ -55,11 +56,12 @@ export default function StaffTracking() {
   }, [filtered, safePage]);
 
   const statusStyle = (status) => {
-    const s = String(status || "").toLowerCase();
-    if (s.includes("progress")) return styles.stInProgress;
-    if (s.includes("completed")) return styles.stCompleted;
-    if (s.includes("arrived")) return styles.stArrived;
-    return styles.stBooked;
+    const meta = getTrackingStatusMeta(status);
+    if (meta.key === "inProgress") return styles.stInProgress;
+    if (meta.key === "completed") return styles.stCompleted;
+    if (meta.key === "arrived") return styles.stArrived;
+    if (meta.key === "scheduled" || meta.key === "confirmed") return styles.stBooked;
+    return styles.stDefault;
   };
 
   return (
@@ -108,19 +110,15 @@ export default function StaffTracking() {
 
                 <View style={[styles.colStatus, styles.statusCell]}>
                   <View style={[styles.statusPill, statusStyle(booking.status)]}>
-                    <Text style={styles.statusTxt}>{booking.status}</Text>
+                    <Text style={styles.statusTxt}>{getTrackingStatusMeta(booking.status).label}</Text>
                   </View>
                 </View>
 
                 <View style={[styles.colAction, styles.actionCell]}>
                   <TouchableOpacity activeOpacity={0.85} style={styles.viewBtn} onPress={() => {
                     setSelected({
-                      id: booking.id,
-                      date: booking.date,
-                      customer: booking.customer,
+                      ...booking,
                       vehicleModel: booking.vehicle,
-                      service: booking.service,
-                      status: booking.status,
                       assignedTo: booking.assigned || "-",
                     });
                     setModalOpen(true);

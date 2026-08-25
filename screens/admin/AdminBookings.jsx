@@ -17,6 +17,16 @@ import MobileFilterModal from "../../components/common/MobileFilterModal.jsx";
 const ICON_SEARCH = require("../../styles/icons/search.png");
 const ICON_FILTER = require("../../styles/icons/filter.png");
 
+function formatDate(dateStr) {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return String(dateStr || "");
+  return d.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 export default function AdminBookings({ onOpenDetails }) {
   const { bookings } = useMobileData();
   const [query, setQuery] = useState("");
@@ -210,17 +220,23 @@ export default function AdminBookings({ onOpenDetails }) {
                       style={styles.viewBtn}
                       onPress={() =>
                         onOpenDetails?.({
+                          _id: booking._id,
                           id: booking.id,
-                          date: booking.date,
+                          date: formatDate(booking.date),
+                          rawDate: booking.date,
                           customer: booking.customer,
+                          customerEmail: booking.customerEmail,
                           vehicleModel: booking.vehicle,
                           carSize: booking.carSize,
                           plate: booking.plate,
                           service: booking.service,
+                          promoId: booking.promoId,
                           assignedTo: booking.assigned || "-",
                           time: booking.time || "-",
+                          placeSlot: booking.placeSlot,
                           status: booking.status,
                           amount: booking.amount,
+                          originalAmount: booking.originalAmount,
                           issueNote: booking.issueNote,
                           issueTypes: booking.issueTypes,
                           issueMarkers: booking.issueMarkers,

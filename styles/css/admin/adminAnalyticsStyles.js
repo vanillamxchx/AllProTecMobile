@@ -137,26 +137,138 @@ export default StyleSheet.create({
   rankName: { flex: 1, fontSize: 13, fontWeight: "900", color: "#111827" },
   rankCount: { fontSize: 12, fontWeight: "800", color: "#111827" },
 
-  /* ai card */
   aiCard: {
     marginTop: 12,
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 14,
-    backgroundColor: "#8B5CF6",
+    backgroundColor: "#111827",
   },
-  aiHead: { flexDirection: "row", alignItems: "center", gap: 10 },
-  aiIcon: {
-    width: 38,
-    height: 38,
+  aiHeadRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  aiHeadCopy: {
+    flex: 1,
+  },
+  aiCardTitle: {
+    fontSize: 18,
+    fontWeight: "950",
+    color: "#FFF",
+  },
+  aiCardSub: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.82)",
+    lineHeight: 18,
+  },
+  aiGenerateBtn: {
+    minHeight: 40,
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "#F8D35F",
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 12,
   },
-  aiIconTxt: { color: "#FFF", fontSize: 16, fontWeight: "950" },
-
-  aiTitle: { fontSize: 18, fontWeight: "950", color: "#FFF" },
-
-  aiBullets: { marginTop: 10, gap: 6 },
-  aiBullet: { fontSize: 12, fontWeight: "700", color: "rgba(255,255,255,0.95)" },
+  aiGenerateBtnDisabled: {
+    opacity: 0.65,
+  },
+  aiGenerateTxt: {
+    fontSize: 11,
+    fontWeight: "950",
+    color: "#111827",
+  },
+  aiList: {
+    marginTop: 12,
+    gap: 8,
+  },
+  aiSummaryCard: {
+    borderRadius: 16,
+    backgroundColor: "rgba(248,211,95,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(248,211,95,0.35)",
+    padding: 14,
+  },
+  aiSummaryLabel: {
+    fontSize: 11,
+    fontWeight: "950",
+    color: "#F8D35F",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  aiSummaryTxt: {
+    marginTop: 6,
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    lineHeight: 20,
+  },
+  aiSectionCard: {
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    padding: 12,
+  },
+  aiSectionCardWarning: {
+    backgroundColor: "rgba(239,68,68,0.12)",
+    borderColor: "rgba(248,113,113,0.28)",
+  },
+  aiSectionTitle: {
+    fontSize: 13,
+    fontWeight: "950",
+    color: "#FFFFFF",
+  },
+  aiBulletList: {
+    marginTop: 10,
+    gap: 10,
+  },
+  aiBulletRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  aiBulletDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    marginTop: 5,
+    backgroundColor: "#F8D35F",
+  },
+  aiBulletDotWarning: {
+    backgroundColor: "#F87171",
+  },
+  aiBulletTxt: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    lineHeight: 19,
+  },
+  aiListItem: {
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    padding: 12,
+  },
+  aiListTxt: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    lineHeight: 18,
+  },
+  aiEmpty: {
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    padding: 12,
+  },
+  aiEmptyTxt: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.82)",
+  },
 });

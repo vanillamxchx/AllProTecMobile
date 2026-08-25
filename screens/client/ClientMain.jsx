@@ -17,9 +17,13 @@ import ClientProfile from "./ClientProfile";
 
 // ✅ NEW SCREEN
 import ClientAddBooking from "./ClientAddBooking";
+import NotificationCenterModal from "../../components/common/NotificationCenterModal.jsx";
+import { useMobileData } from "../../context/MobileDataContext.jsx";
 
 export default function ClientMain({ session, onLogout }) {
+  const { notifications, unreadNotificationCount, markNotificationsRead, loading } = useMobileData();
   const [screen, setScreen] = useState("dashboard");
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const goTo = (key) => {
     const route = String(key || "").trim().toLowerCase();
@@ -32,8 +36,19 @@ export default function ClientMain({ session, onLogout }) {
       <AppHeader
         role="client"
         name={session?.email || "C"}
+        onBell={() => setNotificationsOpen(true)}
+        unreadCount={unreadNotificationCount}
         onProfile={() => goTo("profile")}
         onLogout={onLogout}
+      />
+
+      <NotificationCenterModal
+        open={notificationsOpen}
+        onClose={() => setNotificationsOpen(false)}
+        notifications={notifications}
+        unreadCount={unreadNotificationCount}
+        loading={loading}
+        onMarkRead={markNotificationsRead}
       />
 
       <View style={styles.content}>

@@ -12,13 +12,8 @@ import {
 
 import styles from "../../styles/css/client/clientAddBookingStyles";
 import { useMobileData } from "../../context/MobileDataContext.jsx";
-
-const CAR_SIZE_OPTIONS = [
-  "Sedan / Small Car",
-  "Midsize / Pickup / MPV",
-  "SUV",
-  "XL / Van / Semi Truck",
-];
+import { getServiceArrivalTimeOptions } from "../../services/bookingWorkflow";
+import { CAR_SIZE_OPTIONS, getPriceForCarSize } from "../../services/servicePricing";
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const toKey = (d) =>
@@ -55,6 +50,7 @@ function createEmptyForm(defaultService = "") {
     plate: "",
     carSize: "",
     service: defaultService,
+    time: "",
     notes: "",
   };
 }
@@ -132,11 +128,13 @@ export default function ClientAddBooking({ onBack, onConfirm }) {
     plate: false,
     carSize: false,
     service: false,
+    time: false,
   });
 
   const [savedCarOpen, setSavedCarOpen] = useState(false);
   const [serviceOpen, setServiceOpen] = useState(false);
   const [carSizeOpen, setCarSizeOpen] = useState(false);
+  const [timeOpen, setTimeOpen] = useState(false);
 
   const grid = useMemo(() => {
     const start = startOfMonth(month);
@@ -157,7 +155,18 @@ export default function ClientAddBooking({ onBack, onConfirm }) {
     [bookableServices, form.service]
   );
 
-  const total = Number(selectedService?.price || 0);
+  const timeOptions = useMemo(
+    () => (selectedService ? getServiceArrivalTimeOptions(selectedService, form.time) : []),
+    [selectedService, form.time]
+  );
+  const timeOptionLabels = useMemo(
+    () => timeOptions.map((option) => option.label),
+    [timeOptions]
+  );
+  const total = useMemo(
+    () => getPriceForCarSize(selectedService, form.carSize),
+    [selectedService, form.carSize]
+  );
 
   const errors = useMemo(() => {
     const next = {};
@@ -167,6 +176,7 @@ export default function ClientAddBooking({ onBack, onConfirm }) {
     if (!String(form.plate || "").trim()) next.plate = "Plate number is required.";
     if (!String(form.carSize || "").trim()) next.carSize = "Please select a car size.";
     if (!String(form.service || "").trim()) next.service = "Please select a service.";
+    if (!String(form.time || "").trim()) next.time = "Please select a time slot.";
     return next;
   }, [form, selectedDate, todayKey]);
 
@@ -193,6 +203,7 @@ export default function ClientAddBooking({ onBack, onConfirm }) {
       plate: true,
       carSize: true,
       service: true,
+      time: true,
     });
 
     if (!canConfirm) {
@@ -210,7 +221,7 @@ export default function ClientAddBooking({ onBack, onConfirm }) {
         plate: String(form.plate || "").trim().toUpperCase(),
         service: form.service,
         assigned: "",
-        time: "",
+        time: form.time,
         amount: total,
         status: "Pending",
         issueNote: String(form.notes || "").trim(),
@@ -224,6 +235,7 @@ export default function ClientAddBooking({ onBack, onConfirm }) {
         plate: String(form.plate || "").trim().toUpperCase(),
         carSize: String(form.carSize || "").trim(),
         service: form.service,
+        time: form.time,
         amount: total,
       });
     } catch (error) {
@@ -343,6 +355,33 @@ export default function ClientAddBooking({ onBack, onConfirm }) {
             <Text style={styles.chev}>v</Text>
           </TouchableOpacity>
           {showErr("service") && <Text style={styles.errTxt}>{errors.service}</Text>}
+
+          <Text style={styles.label}>Time Slot*</Text>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            style={[styles.selectWrap, showErr("time") && styles.inputError]}
+            onPress={() => {
+              setTouched((prev) => ({ ...prev, time: true }));
+              if (selectedService) {
+                setTimeOpen(true);
+              }
+            }}
+          >
+            <Text style={[styles.selectTxt, !form.time && styles.selectTxtPlaceholder]}>
+              {form.time
+                ? (timeOptions.find((option) => option.value === form.time)?.label || form.time)
+                : (selectedService ? "Select time slot" : "Select a service first")}
+            </Text>
+            <Text style={styles.chev}>v</Text>
+          </TouchableOpacity>
+          {showErr("time") && <Text style={styles.errTxt}>{errors.time}</Text>}
+          {!showErr("time") && (
+            <Text style={styles.helperTxt}>
+              {selectedService
+                ? "Available time slots depend on the selected service."
+                : "Choose a service first to see available time slots."}
+            </Text>
+          )}
 
           <Text style={styles.label}>Additional Notes</Text>
           <View style={styles.textAreaWrap}>
@@ -466,8 +505,20 @@ export default function ClientAddBooking({ onBack, onConfirm }) {
           title="Select a Service"
           options={serviceOptions}
           value={form.service}
-          onPick={(option) => setForm((prev) => ({ ...prev, service: option }))}
+          onPick={(option) => setForm((prev) => ({ ...prev, service: option, time: "" }))}
           onClose={() => setServiceOpen(false)}
+        />
+
+        <SelectModal
+          visible={timeOpen}
+          title="Select Time Slot"
+          options={timeOptionLabels}
+          value={timeOptions.find((option) => option.value === form.time)?.label || ""}
+          onPick={(label) => {
+            const selectedOption = timeOptions.find((option) => option.label === label);
+            setForm((prev) => ({ ...prev, time: selectedOption?.value || prev.time }));
+          }}
+          onClose={() => setTimeOpen(false)}
         />
 
         <View style={{ height: 24 }} />

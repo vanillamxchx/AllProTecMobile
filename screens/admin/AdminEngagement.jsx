@@ -6,7 +6,8 @@ import { useMobileData } from "../../context/MobileDataContext.jsx";
 import { exportTabularPdf } from "../../services/exportPdf.js";
 
 export default function AdminEngagement() {
-  const { reviews, promos } = useMobileData();
+  const { reviews, promos, rewards, customerRewards, formatDate } = useMobileData();
+  const rewardRecords = rewards.length ? rewards : customerRewards;
 
   const ratingLabel = (value) => {
     const safeValue = Math.max(0, Math.min(5, Number(value) || 0));
@@ -48,11 +49,29 @@ export default function AdminEngagement() {
       ],
     });
 
+  const exportRewardsPdf = () =>
+    exportTabularPdf({
+      title: "Admin Rewards Report",
+      subtitle: "Rewards exported in tabular format.",
+      sections: [
+        {
+          columns: ["Reward", "Value", "Status", "Expiration"],
+          rows: rewardRecords.map((reward) => [
+            reward.rewardName || reward.name || reward.title || "Reward",
+            reward.rewardValue || reward.value || reward.description || "-",
+            reward.status || "-",
+            reward.expirationDate ? formatDate(reward.expirationDate) : "-",
+          ]),
+          emptyMessage: "No rewards available.",
+        },
+      ],
+    });
+
   return (
     <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
       <View style={styles.pageHead}>
         <Text style={styles.h1}>Engagement</Text>
-        <Text style={styles.h2}>Reviews, promos, and messaging.</Text>
+        <Text style={styles.h2}>Reviews, promos, and client-facing messaging.</Text>
       </View>
 
       <View style={styles.card}>
@@ -87,6 +106,34 @@ export default function AdminEngagement() {
             </View>
           )}
         </View>
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.cardTopRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardTitle}>Rewards</Text>
+            <Text style={styles.cardSub}>View-only reward records from the shared database.</Text>
+          </View>
+          <TouchableOpacity activeOpacity={0.85} style={styles.exportBtn} onPress={exportRewardsPdf}>
+            <Text style={styles.exportTxt}>Export PDF</Text>
+          </TouchableOpacity>
+        </View>
+
+        {rewardRecords.length ? (
+          rewardRecords.map((reward) => (
+            <View key={reward.id || reward.rewardId || reward.title} style={{ paddingVertical: 10, borderTopWidth: 1, borderTopColor: "#E5E7EB" }}>
+              <Text style={styles.cardTitle}>{reward.rewardName || reward.name || reward.title || "Reward"}</Text>
+              <Text style={styles.cardSub}>{reward.rewardValue || reward.value || reward.description || "-"}</Text>
+              <Text style={[styles.cardSub, { marginTop: 4 }]}>
+                {reward.status || "-"}{reward.expirationDate ? ` | Expires ${formatDate(reward.expirationDate)}` : ""}
+              </Text>
+            </View>
+          ))
+        ) : (
+          <View style={styles.emptyWrap}>
+            <Text style={styles.emptyTxt}>No rewards available.</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.card}>

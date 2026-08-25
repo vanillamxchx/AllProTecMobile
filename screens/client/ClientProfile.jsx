@@ -9,7 +9,13 @@ import {
 } from "react-native";
 
 import styles from "../../styles/css/client/clientProfileStyles";
-import { useMobileData } from "../../context/MobileDataContext.jsx";
+import OtpEmailConfirmModal from "../../components/common/OtpEmailConfirmModal.jsx";
+import OtpCodeModal from "../../components/common/OtpCodeModal.jsx";
+import {
+  requestPasswordOtp,
+  useMobileData,
+  verifyPasswordOtp,
+} from "../../context/MobileDataContext.jsx";
 
 const CAR_SIZE_OPTIONS = [
   "Sedan / Small Car",
@@ -31,7 +37,8 @@ function createEmptyCar() {
 }
 
 export default function ClientProfile({ session }) {
-  const { currentUser, updateProfile } = useMobileData();
+  const { currentUser, updateProfile, updateOwnPassword } = useMobileData();
+  const accountEmail = String(currentUser?.email || session?.email || "").trim().toLowerCase();
   const initial = useMemo(() => {
     const email = String(currentUser?.email || session?.email || "C");
     return email.slice(0, 1).toUpperCase();
@@ -57,6 +64,15 @@ export default function ClientProfile({ session }) {
   const [confirmPass, setConfirmPass] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
+  const [otpRequestVisible, setOtpRequestVisible] = useState(false);
+  const [otpModalVisible, setOtpModalVisible] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpError, setOtpError] = useState("");
+  const [otpRequestError, setOtpRequestError] = useState("");
+  const [otpBusy, setOtpBusy] = useState(false);
+  const [otpVerificationId, setOtpVerificationId] = useState("");
+  const [otpDestination, setOtpDestination] = useState("");
+  const [pendingPayload, setPendingPayload] = useState(null);
 
   const [isEditing, setIsEditing] = useState(false);
   const [snapshot, setSnapshot] = useState(initialProfile);
@@ -218,61 +234,26 @@ export default function ClientProfile({ session }) {
     setIsEditing(false);
   };
 
-  const onSave = () => {
-    if (!isEditing) {
-      setSnapshot({ first, last, email, phone, cars });
-      setIsEditing(true);
-      return;
-    }
+  const closeOtpModal = () => {
+    if (otpBusy) return;
+    setOtpModalVisible(false);
+    setOtpCode("");
+    setOtpError("");
+    setOtpVerificationId("");
+    setOtpDestination("");
+    setPendingPayload(null);
+  };
 
-    setTouched({
-      first: true,
-      last: true,
-      email: true,
-      phone: true,
-      pass: true,
-      confirmPass: true,
-    });
+  const closeOtpRequestModal = () => {
+    if (otpBusy) return;
+    setOtpRequestVisible(false);
+    setOtpRequestError("");
+    setOtpVerificationId("");
+    setOtpDestination("");
+    setPendingPayload(null);
+  };
 
-    const payload = {
-      first: clean(first),
-      last: clean(last),
-      email: clean(email),
-      phone: clean(phone),
-      password: clean(pass),
-      cars: cars.map(normalizeCar),
-    };
-
-    if (!payload.first || payload.first.length < 2) {
-      return Alert.alert("Invalid name", "First name must be at least 2 characters.");
-    }
-    if (!payload.last || payload.last.length < 2) {
-      return Alert.alert("Invalid name", "Last name must be at least 2 characters.");
-    }
-    if (!isValidEmail(payload.email)) {
-      return Alert.alert("Invalid email", "Please enter a valid email address.");
-    }
-    if (payload.phone && (payload.phone.length < 10 || !/^\d+$/.test(payload.phone))) {
-      return Alert.alert("Invalid phone", "Please enter a valid phone number.");
-    }
-
-    if (clean(carDraft.vehicle) || clean(carDraft.plate) || clean(carDraft.size)) {
-      setCarTouched({ vehicle: true, plate: true, size: true });
-      return Alert.alert("Unsaved car details", "Add the car to your saved list first, or clear the car detail fields.");
-    }
-
-    if (payload.password) {
-      const pe = passwordError(payload.password);
-      if (pe) return Alert.alert("Weak password", pe);
-
-      if (!clean(confirmPass)) {
-        return Alert.alert("Confirm Password", "Please confirm your password.");
-      }
-      if (payload.password !== clean(confirmPass)) {
-        return Alert.alert("Mismatch", "Passwords do not match.");
-      }
-    }
-
+  const finishSave = (payload) => {
     updateProfile(payload)
       .then(() => {
         Alert.alert("Saved", "Profile and saved car details updated.");
@@ -295,10 +276,200 @@ export default function ClientProfile({ session }) {
           plate: false,
           size: false,
         });
+        closeOtpModal();
       })
       .catch((error) => {
         Alert.alert("Save failed", error.message || "Could not update your account.");
       });
+  };
+
+  const sendPasswordOtp = (payload, { resend = false } = {}) => {
+    setPendingPayload(payload);
+    setOtpVerificationId("");
+    setOtpDestination(accountEmail);
+    if (resend) {
+      setOtpError("");
+    } else {
+      setOtpCode("");
+      setOtpError("");
+      setOtpRequestError("");
+    }
+    setOtpBusy(true);
+    requestPasswordOtp({
+      email: accountEmail,
+      purpose: "change-password",
+      channel: "email",
+    })
+      .then((result) => {
+        setOtpVerificationId(result.verificationId || "");
+        setOtpDestination(result.destination || accountEmail);
+        setOtpError("");
+        if (!resend) {
+          setOtpRequestVisible(false);
+        }
+        setOtpModalVisible(true);
+      })
+      .catch((error) => {
+        setOtpVerificationId("");
+        if (resend) {
+          setOtpError(error.message || "Could not send the security code.");
+        } else {
+          setOtpRequestError(error.message || "Could not send the security code.");
+        }
+      })
+      .finally(() => {
+        setOtpBusy(false);
+      });
+  };
+
+  const confirmPasswordOtp = () => {
+    const code = clean(otpCode);
+    if (!code) {
+      setOtpError("OTP code is required.");
+      return;
+    }
+
+    setOtpBusy(true);
+    verifyPasswordOtp({
+      email: accountEmail,
+      verificationId: otpVerificationId,
+      otp: code,
+      purpose: "change-password",
+    })
+      .then(() =>
+        updateOwnPassword?.({
+          password: pendingPayload?.password,
+          verificationId: otpVerificationId,
+          otp: code,
+        })
+      )
+      .then(() => {
+        Alert.alert("Password updated", "Password updated successfully.");
+        setIsEditing(false);
+        setPass("");
+        setConfirmPass("");
+        setShowPass(false);
+        setShowConfirmPass(false);
+        setTouched({
+          first: false,
+          last: false,
+          email: false,
+          phone: false,
+          pass: false,
+          confirmPass: false,
+        });
+        setCarDraft(createEmptyCar());
+        setCarTouched({ vehicle: false, plate: false, size: false });
+        closeOtpModal();
+      })
+      .catch((error) => {
+        setOtpError(error.message || "Invalid code. Try again.");
+      })
+      .finally(() => {
+        setOtpBusy(false);
+      });
+  };
+
+  const buildProfilePayload = ({ includePassword = false } = {}) => ({
+      first: clean(first),
+      last: clean(last),
+      email: clean(email),
+      phone: clean(phone),
+      cars: cars.map(normalizeCar),
+      ...(includePassword ? { password: clean(pass) } : {}),
+    });
+
+  const validateProfileDetails = () => {
+    const payload = buildProfilePayload();
+
+    if (!payload.first || payload.first.length < 2) {
+      Alert.alert("Invalid name", "First name must be at least 2 characters.");
+      return null;
+    }
+    if (!payload.last || payload.last.length < 2) {
+      Alert.alert("Invalid name", "Last name must be at least 2 characters.");
+      return null;
+    }
+    if (!isValidEmail(payload.email)) {
+      Alert.alert("Invalid email", "Please enter a valid email address.");
+      return null;
+    }
+    if (payload.phone && (payload.phone.length < 10 || !/^\d+$/.test(payload.phone))) {
+      Alert.alert("Invalid phone", "Please enter a valid phone number.");
+      return null;
+    }
+
+    if (clean(carDraft.vehicle) || clean(carDraft.plate) || clean(carDraft.size)) {
+      setCarTouched({ vehicle: true, plate: true, size: true });
+      Alert.alert("Unsaved car details", "Add the car to your saved list first, or clear the car detail fields.");
+      return null;
+    }
+
+    return payload;
+  };
+
+  const onChangePassword = () => {
+    if (!isEditing) return;
+
+    setTouched((prev) => ({
+      ...prev,
+      pass: true,
+      confirmPass: true,
+    }));
+
+    const profilePayload = validateProfileDetails();
+    if (!profilePayload) return;
+
+    const nextPassword = clean(pass);
+    if (!nextPassword) {
+      Alert.alert("Password", "Please enter your new password.");
+      return;
+    }
+
+    const pe = passwordError(nextPassword);
+    if (pe) {
+      Alert.alert("Weak password", pe);
+      return;
+    }
+
+    if (!clean(confirmPass)) {
+      Alert.alert("Confirm Password", "Please confirm your password.");
+      return;
+    }
+
+    if (nextPassword !== clean(confirmPass)) {
+      Alert.alert("Mismatch", "Passwords do not match.");
+      return;
+    }
+
+    setPendingPayload({
+      ...profilePayload,
+      password: nextPassword,
+    });
+    setOtpRequestError("");
+    setOtpRequestVisible(true);
+  };
+
+  const onSave = () => {
+    if (!isEditing) {
+      setSnapshot({ first, last, email, phone, cars });
+      setIsEditing(true);
+      return;
+    }
+
+    setTouched({
+      first: true,
+      last: true,
+      email: true,
+      phone: true,
+      pass: false,
+      confirmPass: false,
+    });
+
+    const payload = validateProfileDetails();
+    if (!payload) return;
+
+    finishSave(payload);
   };
 
   return (
@@ -379,6 +550,70 @@ export default function ClientProfile({ session }) {
           selectTextOnFocus={isEditing}
         />
         {!!errors.phone && <Text style={styles.errorTxt}>{errors.phone}</Text>}
+
+        <Text style={styles.label}>Password</Text>
+        {isEditing ? (
+          <View style={styles.passRow}>
+            <TextInput
+              value={pass}
+              onChangeText={(v) => {
+                setPass(v);
+                if (isEditing) setTouched((t) => ({ ...t, pass: true }));
+              }}
+              placeholder="Enter your password"
+              placeholderTextColor="#9CA3AF"
+              secureTextEntry={!showPass}
+              style={[styles.passInput, errors.pass && styles.inputError]}
+              editable
+              selectTextOnFocus
+            />
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={styles.showBtn}
+              onPress={() => setShowPass((s) => !s)}
+            >
+              <Text style={styles.showTxt}>{showPass ? "Hide" : "Show"}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TextInput value="••••••••" secureTextEntry style={styles.input} editable={false} />
+        )}
+        {!!errors.pass && <Text style={styles.errorTxt}>{errors.pass}</Text>}
+
+        {isEditing && (
+          <>
+            <Text style={styles.label}>Confirm Password</Text>
+            <View style={styles.passRow}>
+              <TextInput
+                value={confirmPass}
+                onChangeText={(v) => {
+                  setConfirmPass(v);
+                  setTouched((t) => ({ ...t, confirmPass: true }));
+                }}
+                placeholder="Re-enter your password"
+                placeholderTextColor="#9CA3AF"
+                secureTextEntry={!showConfirmPass}
+                style={[styles.passInput, errors.confirmPass && styles.inputError]}
+                editable={isEditing}
+                selectTextOnFocus={isEditing}
+              />
+
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={styles.showBtn}
+                onPress={() => setShowConfirmPass((s) => !s)}
+              >
+                <Text style={styles.showTxt}>{showConfirmPass ? "Hide" : "Show"}</Text>
+              </TouchableOpacity>
+            </View>
+            {!!errors.confirmPass && <Text style={styles.errorTxt}>{errors.confirmPass}</Text>}
+
+            <TouchableOpacity activeOpacity={0.92} style={styles.changePasswordBtn} onPress={onChangePassword}>
+              <Text style={styles.changePasswordTxt}>Change Password</Text>
+            </TouchableOpacity>
+          </>
+        )}
 
         <View style={styles.sectionDivider} />
         <Text style={styles.sectionTitle}>Saved Car Details</Text>
@@ -470,63 +705,6 @@ export default function ClientProfile({ session }) {
           </>
         ) : null}
 
-        <Text style={styles.label}>Password</Text>
-        <View style={styles.passRow}>
-          <TextInput
-            value={pass}
-            onChangeText={(v) => {
-              setPass(v);
-              if (isEditing) setTouched((t) => ({ ...t, pass: true }));
-            }}
-            placeholder="Enter your password"
-            placeholderTextColor="#9CA3AF"
-            secureTextEntry={!showPass}
-            style={[styles.passInput, errors.pass && styles.inputError]}
-            editable={isEditing}
-            selectTextOnFocus={isEditing}
-          />
-
-          <TouchableOpacity
-            activeOpacity={0.9}
-            style={[styles.showBtn, !isEditing && { opacity: 0.5 }]}
-            onPress={() => setShowPass((s) => !s)}
-            disabled={!isEditing}
-          >
-            <Text style={styles.showTxt}>{showPass ? "Hide" : "Show"}</Text>
-          </TouchableOpacity>
-        </View>
-        {!!errors.pass && <Text style={styles.errorTxt}>{errors.pass}</Text>}
-
-        {isEditing && (
-          <>
-            <Text style={styles.label}>Confirm Password</Text>
-            <View style={styles.passRow}>
-              <TextInput
-                value={confirmPass}
-                onChangeText={(v) => {
-                  setConfirmPass(v);
-                  setTouched((t) => ({ ...t, confirmPass: true }));
-                }}
-                placeholder="Re-enter your password"
-                placeholderTextColor="#9CA3AF"
-                secureTextEntry={!showConfirmPass}
-                style={[styles.passInput, errors.confirmPass && styles.inputError]}
-                editable={isEditing}
-                selectTextOnFocus={isEditing}
-              />
-
-              <TouchableOpacity
-                activeOpacity={0.9}
-                style={styles.showBtn}
-                onPress={() => setShowConfirmPass((s) => !s)}
-              >
-                <Text style={styles.showTxt}>{showConfirmPass ? "Hide" : "Show"}</Text>
-              </TouchableOpacity>
-            </View>
-            {!!errors.confirmPass && <Text style={styles.errorTxt}>{errors.confirmPass}</Text>}
-          </>
-        )}
-
         <TouchableOpacity activeOpacity={0.92} style={styles.saveBtn} onPress={onSave}>
           <Text style={styles.saveTxt}>{isEditing ? "Save Changes" : "Edit Account"}</Text>
         </TouchableOpacity>
@@ -539,6 +717,32 @@ export default function ClientProfile({ session }) {
       </View>
 
       <View style={{ height: 12 }} />
+      <OtpEmailConfirmModal
+        visible={otpRequestVisible}
+        title="Verify Email"
+        subtitle="We will send a security code to verify your email."
+        email={accountEmail}
+        error={otpRequestError}
+        busy={otpBusy}
+        onClose={closeOtpRequestModal}
+        onConfirm={() => pendingPayload && sendPasswordOtp(pendingPayload)}
+      />
+      <OtpCodeModal
+        visible={otpModalVisible}
+        title="Enter Security Code"
+        subtitle={`Please check ${otpDestination || accountEmail || "your email"} for a message with your code.`}
+        value={otpCode}
+        error={otpError}
+        busy={otpBusy}
+        confirmEnabled={Boolean(otpVerificationId)}
+        onChangeText={(value) => {
+          setOtpCode(value.replace(/[^\d]/g, "").slice(0, 6));
+          if (otpError) setOtpError("");
+        }}
+        onClose={closeOtpModal}
+        onConfirm={confirmPasswordOtp}
+        onResend={() => pendingPayload && sendPasswordOtp(pendingPayload, { resend: true })}
+      />
     </ScrollView>
   );
 }

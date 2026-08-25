@@ -113,13 +113,30 @@ export default function StaffBookings() {
                   <View style={styles.tdAct}>
                     <TouchableOpacity activeOpacity={0.9} style={styles.viewBtn} onPress={() => {
                       setSelected({
+                        _id: booking._id,
                         id: booking.id,
                         date: formatDate(booking.date),
+                        rawDate: booking.date,
                         customer: booking.customer,
+                        customerEmail: booking.customerEmail,
                         vehicleModel: booking.vehicle,
+                        carSize: booking.carSize,
                         plate: booking.plate,
                         service: booking.service,
                         assignedTo: booking.assigned || "-",
+                        time: booking.time || "-",
+                        placeSlot: booking.placeSlot,
+                        promoId: booking.promoId,
+                        amount: booking.amount,
+                        originalAmount: booking.originalAmount,
+                        status: booking.status,
+                        issueNote: booking.issueNote,
+                        issueTypes: booking.issueTypes,
+                        issueMarkers: booking.issueMarkers,
+                        serviceChecklist: booking.serviceChecklist,
+                        warranty: booking.warranty,
+                        eSignature: booking.eSignature,
+                        termsAccepted: booking.termsAccepted,
                       });
                       setModalOpen(true);
                     }}>

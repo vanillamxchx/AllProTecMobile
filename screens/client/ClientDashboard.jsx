@@ -41,21 +41,21 @@ export default function ClientDashboard({ goTo }) {
         <Text style={styles.sub}>Overview and quick stats.</Text>
       </View>
 
-      <View style={styles.bigCard}>
+      <TouchableOpacity activeOpacity={0.85} style={styles.bigCard} onPress={() => goTo?.("bookings")}>
         <Text style={styles.bigNum}>{stats.today}</Text>
         <Text style={styles.bigLabel}>Bookings today</Text>
-      </View>
+      </TouchableOpacity>
 
       <View style={styles.row}>
-        <View style={styles.smallCard}>
+        <TouchableOpacity activeOpacity={0.85} style={styles.smallCard} onPress={() => goTo?.("bookings")}>
           <Text style={styles.smallNum}>{stats.upcoming}</Text>
           <Text style={styles.smallLabel}>Upcoming</Text>
-        </View>
+        </TouchableOpacity>
 
-        <View style={styles.smallCard}>
+        <TouchableOpacity activeOpacity={0.85} style={styles.smallCard} onPress={() => goTo?.("tracking")}>
           <Text style={styles.smallNum}>{stats.completed}</Text>
           <Text style={styles.smallLabel}>Completed</Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.sectionCard}>
@@ -65,10 +65,15 @@ export default function ClientDashboard({ goTo }) {
         <View style={styles.list}>
           {upcomingBookings.length ? (
             upcomingBookings.map((booking) => (
-              <View key={booking.id} style={styles.listItem}>
+              <TouchableOpacity
+                key={booking.id}
+                activeOpacity={0.85}
+                style={styles.listItem}
+                onPress={() => goTo?.("bookings")}
+              >
                 <Text style={styles.itemTitle}>{booking.title}</Text>
                 <Text style={styles.itemSub}>{booking.date}</Text>
-              </View>
+              </TouchableOpacity>
             ))
           ) : (
             <View style={styles.listItem}>

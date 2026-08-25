@@ -1,119 +1,496 @@
 import React, { useMemo, useState } from "react";
-import { View, Text, ScrollView, TextInput, TouchableOpacity, Image, Alert } from "react-native";
+import {
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import * as MobileDataModule from "../../context/MobileDataContext";
+import { formatTimeLabel, normalizeAllowedArrivalTimes } from "../../services/bookingWorkflow";
+import { formatPriceRangeLabel } from "../../services/servicePricing";
 
-import styles from "../../styles/css/client/clientServicesStyles";
-import { useMobileData } from "../../context/MobileDataContext.jsx";
-import MobileFilterModal from "../../components/common/MobileFilterModal.jsx";
+const useMobileDataHook =
+  MobileDataModule.useMobileData ||
+  MobileDataModule.useMobileDataContext ||
+  (() => ({}));
 
-const ICON_SEARCH = require("../../styles/icons/search.png");
-const ICON_FILTER = require("../../styles/icons/filter.png");
+const styles = {
+  screen: {
+    flex: 1,
+    backgroundColor: "#f4f3ef",
+  },
+  content: {
+    padding: 18,
+    gap: 16,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#1f2533",
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#6d7688",
+  },
+  controlsWrap: {
+    gap: 12,
+  },
+  searchRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "stretch",
+  },
+  searchBox: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#e6e3da",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  searchIcon: {
+    fontSize: 20,
+    color: "#a0a7b4",
+    fontWeight: "700",
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1f2533",
+    padding: 0,
+  },
+  filterButton: {
+    width: 58,
+    backgroundColor: "#ffffff",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#e6e3da",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterButtonActive: {
+    borderColor: "#d2aa27",
+    backgroundColor: "#fff5d4",
+  },
+  filterButtonText: {
+    fontSize: 18,
+    color: "#8f98a8",
+    fontWeight: "900",
+  },
+  filterPanel: {
+    backgroundColor: "#ffffff",
+    borderRadius: 22,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#e6e3da",
+    gap: 14,
+  },
+  filterSectionTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#1f2533",
+  },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  chip: {
+    minHeight: 42,
+    borderWidth: 1,
+    borderColor: "#d7d9e0",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chipActive: {
+    borderColor: "#d2aa27",
+    backgroundColor: "#fff5d4",
+  },
+  chipText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#1f2533",
+  },
+  sectionBlock: {
+    gap: 12,
+  },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#1f2533",
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#6d7688",
+    marginTop: -4,
+  },
+  serviceCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 22,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#e6e3da",
+  },
+  serviceTitle: {
+    fontSize: 21,
+    fontWeight: "900",
+    color: "#1f2533",
+    marginBottom: 6,
+  },
+  serviceDescription: {
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: "700",
+    color: "#6d7688",
+    marginBottom: 10,
+  },
+  serviceMeta: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#6d7688",
+  },
+  emptyCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 22,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#e6e3da",
+  },
+  emptyText: {
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: "700",
+    color: "#6d7688",
+  },
+};
 
-export default function ClientServices({ goTo }) {
-  const { services, createBooking, currentUser } = useMobileData();
-  const [query, setQuery] = useState("");
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [filters, setFilters] = useState({ category: "All" });
+function asArray(value) {
+  return Array.isArray(value) ? value.filter(Boolean) : [];
+}
 
-  const categoryOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          services
-            .filter((service) => service.enabled !== false)
-            .map((service) => String(service.category || "").trim())
-            .filter(Boolean)
-        )
+function normalizeStatus(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isVisibleService(service) {
+  if (!service || typeof service !== "object") return false;
+  if (service.isArchived || service.archived) return false;
+  const status = normalizeStatus(service.status || service.state || service.availability);
+  if (service.isActive === true || service.active === true) return true;
+  if (!status) return true;
+  return status === "active" || status === "available" || status === "enabled";
+}
+
+function parsePriceValue(value) {
+  if (typeof value === "number") return value;
+  const raw = String(value || "").replace(/,/g, "");
+  const match = raw.match(/-?\d+(\.\d+)?/);
+  return match ? Number(match[0]) : NaN;
+}
+
+function normalizeServices(rawServices) {
+  return asArray(rawServices)
+    .filter(isVisibleService)
+    .map((service, index) => ({
+      id: service.id || service._id || service.serviceId || `service-${index}`,
+      name: service.name || service.title || service.serviceName || "Service",
+      description:
+        service.description ||
+        service.summary ||
+        service.details ||
+        service.longDescription ||
+        "Professional vehicle care service.",
+      price:
+        service.price ||
+        service.basePrice ||
+        service.amount ||
+        service.rate ||
+        "",
+      priceValue: parsePriceValue(
+        service.price || service.basePrice || service.amount || service.rate
       ),
-    [services]
+      duration: service.duration || service.estimatedDuration || "",
+      mins: Number(service.mins || service.durationMinutes || 0) || 0,
+      priceBySize: service.priceBySize || {},
+      allowedArrivalTimes: Array.isArray(service.allowedArrivalTimes) ? service.allowedArrivalTimes : [],
+      consumablesBySize: service.consumablesBySize || {},
+      consumables: Array.isArray(service.consumables) ? service.consumables : [],
+      category: String(
+        service.category ||
+          service.type ||
+          service.group ||
+          service.serviceCategory ||
+          service.kind ||
+          ""
+      ).trim(),
+      rawType: String(
+        service.type || service.kind || service.serviceType || service.group || ""
+      ).trim(),
+      isPackageFlag:
+        service.isPackage === true ||
+        service.package === true ||
+        service.is_bundle === true ||
+        service.isBundle === true ||
+        service.bundle === true,
+      packageItemsCount:
+        asArray(service.packageItems).length ||
+        asArray(service.includedServices).length ||
+        asArray(service.servicesIncluded).length ||
+        asArray(service.items).length ||
+        0,
+    }));
+}
+
+function resolveServices(data, props) {
+  return (
+    props?.services ||
+    props?.route?.params?.services ||
+    data?.services ||
+    data?.serviceCatalog ||
+    data?.availableServices ||
+    data?.allServices ||
+    data?.bootstrap?.services ||
+    []
+  );
+}
+
+function formatMeta(service) {
+  const parts = [];
+  parts.push(`Price: ${formatPriceRangeLabel(service)}`);
+  if (service.duration) parts.push(`Duration: ${service.duration}`);
+  const arrivalTimes = normalizeAllowedArrivalTimes(service?.allowedArrivalTimes, service?.mins)
+    .map((time) => formatTimeLabel(time))
+    .join(", ");
+  if (arrivalTimes) parts.push(`Arrival: ${arrivalTimes}`);
+  return parts.join("  •  ");
+}
+
+function isPackageService(service) {
+  if (!service) return false;
+  if (service.isPackageFlag) return true;
+  if (service.packageItemsCount > 0) return true;
+
+  const category = normalizeText(service.category);
+  const rawType = normalizeText(service.rawType);
+  const explicitPackageValues = [
+    "package",
+    "packages",
+    "bundle",
+    "bundles",
+    "combo",
+    "combos",
+    "set",
+    "sets",
+  ];
+
+  return explicitPackageValues.includes(category) || explicitPackageValues.includes(rawType);
+}
+
+function matchesPriceFilter(service, activePriceFilter) {
+  if (activePriceFilter === "all") return true;
+  if (!Number.isFinite(service.priceValue)) return false;
+  if (activePriceFilter === "low") return service.priceValue < 2000;
+  if (activePriceFilter === "mid") {
+    return service.priceValue >= 2000 && service.priceValue <= 5000;
+  }
+  if (activePriceFilter === "high") return service.priceValue > 5000;
+  return true;
+}
+
+export default function ClientServices(props) {
+  const mobileData = useMobileDataHook() || {};
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [activeTypeFilter, setActiveTypeFilter] = useState("all");
+  const [activePriceFilter, setActivePriceFilter] = useState("all");
+
+  const services = useMemo(
+    () => normalizeServices(resolveServices(mobileData, props)),
+    [mobileData, props]
   );
 
-  const filtered = useMemo(() => {
-    const q = String(query || "").trim().toLowerCase();
-    return services.filter(
-      (service) =>
-        service.enabled !== false &&
-        (filters.category === "All" || String(service.category || "").trim() === filters.category) &&
-        `${service.name} ${service.desc}`.toLowerCase().includes(q)
-    );
-  }, [services, query, filters]);
+  const filteredServices = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
 
-  const onBook = async (service) => {
-    try {
-      await createBooking({
-        customer: currentUser?.name || "Customer",
-        customerEmail: currentUser?.email || "",
-        vehicle: "Vehicle to be confirmed",
-        plate: "",
-        service: service.name,
-        assigned: "",
-        date: new Date().toISOString().slice(0, 10),
-        time: "08:00",
-        amount: Number(service.price || 0),
-        status: "Scheduled",
-      });
-      Alert.alert("Booked", `${service.name} has been added to your bookings.`);
-      goTo?.("bookings");
-    } catch (error) {
-      Alert.alert("Booking failed", error.message || "Could not create booking.");
-    }
-  };
+    return services.filter((service) => {
+      const matchesQuery =
+        !normalizedQuery ||
+        service.name.toLowerCase().includes(normalizedQuery) ||
+        service.description.toLowerCase().includes(normalizedQuery) ||
+        String(service.category || "").toLowerCase().includes(normalizedQuery);
+
+      const isPackage = isPackageService(service);
+      const matchesType =
+        activeTypeFilter === "all" ||
+        (activeTypeFilter === "basic" && !isPackage) ||
+        (activeTypeFilter === "packages" && isPackage);
+
+      return matchesQuery && matchesType && matchesPriceFilter(service, activePriceFilter);
+    });
+  }, [services, searchQuery, activeTypeFilter, activePriceFilter]);
+
+  const basicServices = useMemo(
+    () => filteredServices.filter((service) => !isPackageService(service)),
+    [filteredServices]
+  );
+  const packageServices = useMemo(
+    () => filteredServices.filter((service) => isPackageService(service)),
+    [filteredServices]
+  );
+
+  const renderServiceCard = (service) => (
+    <View key={service.id} style={styles.serviceCard}>
+      <Text style={styles.serviceTitle}>{service.name}</Text>
+      <Text style={styles.serviceDescription}>{service.description}</Text>
+      {formatMeta(service) ? (
+        <Text style={styles.serviceMeta}>{formatMeta(service)}</Text>
+      ) : null}
+    </View>
+  );
 
   return (
-    <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-      <View style={styles.headBlock}>
-        <Text style={styles.h1}>Services</Text>
-        <Text style={styles.h2}>Service catalog and booking.</Text>
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <View>
+        <Text style={styles.headerTitle}>Services</Text>
+        <Text style={styles.headerSubtitle}>
+          Choose a service and start a new booking right away.
+        </Text>
       </View>
 
-      <View style={styles.searchRow}>
-        <View style={styles.searchBox}>
-          <Image source={ICON_SEARCH} style={styles.searchIcon} resizeMode="contain" />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search Services..."
-            placeholderTextColor="#9CA3AF"
-            style={styles.searchInput}
-          />
-        </View>
-
-        <TouchableOpacity activeOpacity={0.85} style={styles.filterBtn} onPress={() => setFilterOpen(true)}>
-          <Image source={ICON_FILTER} style={styles.filterIcon} resizeMode="contain" />
-        </TouchableOpacity>
-      </View>
-
-      {filtered.map((service) => (
-        <View key={service.id} style={styles.card}>
-          <Text style={styles.serviceName}>{service.name}</Text>
-          <Text style={styles.serviceDesc}>{service.desc}</Text>
-
-          <View style={styles.bottomRow}>
-            <Text style={styles.metaText}>
-              Price: PHP {Number(service.price || 0).toLocaleString()} - Est: {Number(service.mins || 0)} mins
-            </Text>
-
-            <TouchableOpacity activeOpacity={0.9} style={styles.bookBtn} onPress={() => onBook(service)}>
-              <Text style={styles.bookTxt}>Book</Text>
-            </TouchableOpacity>
+      <View style={styles.controlsWrap}>
+        <View style={styles.searchRow}>
+          <View style={styles.searchBox}>
+            <Text style={styles.searchIcon}>Q</Text>
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search Services..."
+              placeholderTextColor="#98a0ae"
+              style={styles.searchInput}
+            />
           </View>
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              showFilters ? styles.filterButtonActive : null,
+            ]}
+            activeOpacity={0.85}
+            onPress={() => setShowFilters((value) => !value)}
+          >
+            <Text style={styles.filterButtonText}>=</Text>
+          </TouchableOpacity>
         </View>
-      ))}
 
-      <MobileFilterModal
-        open={filterOpen}
-        title="Filter Services"
-        values={filters}
-        fields={[
-          { key: "category", label: "CATEGORY", options: categoryOptions },
-        ]}
-        onClose={() => setFilterOpen(false)}
-        onApply={(nextValues) => {
-          setFilters(nextValues);
-          setFilterOpen(false);
-        }}
-      />
+        {showFilters ? (
+          <View style={styles.filterPanel}>
+            <View>
+              <Text style={styles.filterSectionTitle}>Type</Text>
+              <View style={styles.chipRow}>
+                {[
+                  { key: "all", label: "All" },
+                  { key: "basic", label: "Basic" },
+                  { key: "packages", label: "Packages" },
+                ].map((filter) => (
+                  <TouchableOpacity
+                    key={filter.key}
+                    style={[
+                      styles.chip,
+                      activeTypeFilter === filter.key ? styles.chipActive : null,
+                    ]}
+                    activeOpacity={0.85}
+                    onPress={() => setActiveTypeFilter(filter.key)}
+                  >
+                    <Text style={styles.chipText}>{filter.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
 
-      <View style={{ height: 12 }} />
+            <View>
+              <Text style={styles.filterSectionTitle}>Price</Text>
+              <View style={styles.chipRow}>
+                {[
+                  { key: "all", label: "All Prices" },
+                  { key: "low", label: "Below 2000" },
+                  { key: "mid", label: "2000 - 5000" },
+                  { key: "high", label: "Above 5000" },
+                ].map((filter) => (
+                  <TouchableOpacity
+                    key={filter.key}
+                    style={[
+                      styles.chip,
+                      activePriceFilter === filter.key ? styles.chipActive : null,
+                    ]}
+                    activeOpacity={0.85}
+                    onPress={() => setActivePriceFilter(filter.key)}
+                  >
+                    <Text style={styles.chipText}>{filter.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </View>
+        ) : null}
+      </View>
+
+      {filteredServices.length ? (
+        <>
+          <View style={styles.sectionBlock}>
+            <Text style={styles.sectionTitle}>Basic Services</Text>
+            <Text style={styles.sectionSubtitle}>
+              Individual services for specific vehicle care needs.
+            </Text>
+            {basicServices.length ? (
+              basicServices.map(renderServiceCard)
+            ) : (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyText}>
+                  No basic services matched your search or filters.
+                </Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.sectionBlock}>
+            <Text style={styles.sectionTitle}>Packages</Text>
+            <Text style={styles.sectionSubtitle}>
+              Bundled service options for more complete care.
+            </Text>
+            {packageServices.length ? (
+              packageServices.map(renderServiceCard)
+            ) : (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyText}>
+                  No packages matched your search or filters.
+                </Text>
+              </View>
+            )}
+          </View>
+        </>
+      ) : (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>
+            No services matched your search or filters.
+          </Text>
+        </View>
+      )}
     </ScrollView>
   );
 }

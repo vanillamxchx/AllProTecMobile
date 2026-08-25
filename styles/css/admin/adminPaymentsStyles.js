@@ -104,6 +104,8 @@ export default StyleSheet.create({
   statusTxt: { fontSize: 10, fontWeight: "950", color: "#111827" },
   stPending: { backgroundColor: "#FEF3C7" },
   stPaid: { backgroundColor: "#DCFCE7" },
+  stReview: { backgroundColor: "#DBEAFE" },
+  stRejected: { backgroundColor: "#FEE2E2" },
   viewBtn: {
     minHeight: 28,
     paddingHorizontal: 10,

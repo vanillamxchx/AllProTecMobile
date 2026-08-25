@@ -162,6 +162,9 @@ export default StyleSheet.create({
   pillOrange: { backgroundColor: "#FFD7BE" },
   pillOrangeText: { color: "#EA580C" },
 
+  pillGray: { backgroundColor: "#E5E7EB" },
+  pillGrayText: { color: "#374151" },
+
   tdAct: {
     width: "26%",
     alignItems: "center",

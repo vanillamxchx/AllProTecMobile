@@ -62,7 +62,17 @@ export default StyleSheet.create({
   filterIcon: { width: 22, height: 22, opacity: 0.9 },
 
   /* list */
+  section: { marginTop: 14 },
+  sectionTitle: { fontSize: 17, fontWeight: "950", color: "#111827", marginBottom: 10 },
   list: { marginTop: 12, gap: 12 },
+  emptyCard: {
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#E6E6E6",
+    borderRadius: 18,
+    padding: 14,
+  },
+  emptyTxt: { fontSize: 13, fontWeight: "700", color: "#6B7280" },
 
   card: {
     backgroundColor: "#FFF",

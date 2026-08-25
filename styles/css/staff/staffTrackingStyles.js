@@ -99,6 +99,7 @@ export default StyleSheet.create({
   stCompleted: { backgroundColor: "#DCFCE7" },
   stArrived: { backgroundColor: "#FEF3C7" },
   stBooked: { backgroundColor: "#FED7AA" },
+  stDefault: { backgroundColor: "#E5E7EB" },
   viewBtn: {
     minHeight: 28,
     paddingHorizontal: 10,

@@ -21,12 +21,24 @@ import AuthFooter from "../components/AuthFooter.jsx";
 import styles from "../styles/css/loginRegisterStyles.js";
 import {
   loginWithApi,
+  requestPasswordOtp,
+  resetPasswordWithOtp,
   requestSignupOtp,
+  verifyPasswordOtp,
   verifySignupOtp,
 } from "../context/MobileDataContext.jsx";
+import {
+  apiRequest,
+  getApiBaseUrl,
+  getDefaultApiPort,
+  getSuggestedApiBaseUrl,
+  isApiReachabilityError,
+  isReleaseBuildTarget,
+  setApiBaseUrl,
+  subscribeToApiBaseUrl,
+} from "../services/api.js";
 
 const AUTH_BG = require("../styles/images/bg.png");
-
 /* =======================
    Small UI Helpers
 ======================= */
@@ -115,8 +127,6 @@ const phoneOk = (v) => {
   return p.length === 11 && p.startsWith("09") && /^\d{11}$/.test(p);
 };
 
-const genOtp6 = () => String(Math.floor(100000 + Math.random() * 900000));
-
 const validateName = (label, value) => {
   const v = clean(value);
   if (!v) return `${label} is required.`;
@@ -156,6 +166,7 @@ const normalizePermission = (userType, role) => {
    Screen
 ======================= */
 export default function LoginRegister({ onLoginSuccess }) {
+  const releaseBuild = isReleaseBuildTarget();
   const [mode, setMode] = useState("login");
 
   // shared
@@ -179,16 +190,28 @@ export default function LoginRegister({ onLoginSuccess }) {
   // SIGN UP OTP flow: "" | "email" | "code"
   const [otpStep, setOtpStep] = useState("");
   const [otpEmail, setOtpEmail] = useState("");
-  const [otpServerCode, setOtpServerCode] = useState("");
   const [otpInput, setOtpInput] = useState("");
   const [otpVerificationId, setOtpVerificationId] = useState("");
   const [otpDestination, setOtpDestination] = useState("");
+  const [otpBusy, setOtpBusy] = useState(false);
+
 
   // ✅ FORGOT PASSWORD flow: "" | "email" | "code"
   const [fpStep, setFpStep] = useState("");
   const [fpEmail, setFpEmail] = useState("");
-  const [fpServerCode, setFpServerCode] = useState("");
   const [fpInput, setFpInput] = useState("");
+  const [fpVerificationId, setFpVerificationId] = useState("");
+  const [fpDestination, setFpDestination] = useState("");
+  const [fpPassword, setFpPassword] = useState("");
+  const [fpConfirmPassword, setFpConfirmPassword] = useState("");
+  const [fpBusy, setFpBusy] = useState(false);
+  const [fpShowPassword, setFpShowPassword] = useState(false);
+  const [fpShowConfirmPassword, setFpShowConfirmPassword] = useState(false);
+  const [apiSettingsOpen, setApiSettingsOpen] = useState(false);
+  const [apiUrlInput, setApiUrlInput] = useState(getApiBaseUrl());
+  const [apiTestBusy, setApiTestBusy] = useState(false);
+  const [apiStatus, setApiStatus] = useState("");
+  const [apiStatusTone, setApiStatusTone] = useState("neutral");
 
   const { width } = useWindowDimensions();
   const clamp = (n, min, max) => Math.min(Math.max(n, min), max);
@@ -196,6 +219,14 @@ export default function LoginRegister({ onLoginSuccess }) {
   const compact = width <= 430;
 
   const resetErrors = () => setErrors({});
+
+  React.useEffect(() => {
+    setApiUrlInput(getApiBaseUrl());
+    const unsubscribe = subscribeToApiBaseUrl((nextUrl) => {
+      setApiUrlInput(nextUrl);
+    });
+    return unsubscribe;
+  }, []);
 
   const setErrKey = (key, msg) => {
     setErrors((prev) => {
@@ -306,13 +337,32 @@ export default function LoginRegister({ onLoginSuccess }) {
         const permission = normalizePermission(user.userType, user.role);
         onLoginSuccess?.({
           ...user,
+          token: String(payload.token || ""),
           userType: permission,
           role: permission,
           subRole: String(user.role || "").trim().toLowerCase(),
         });
       })
       .catch((error) => {
-        setErrors({ email: "", pass: error.message || "Invalid email or password." });
+        const message = String(error?.message || "");
+        if (message.toLowerCase().includes("not allowed by cors")) {
+          setErrors({
+            email: "",
+            pass: "Railway blocked this Expo web origin. Add http://localhost:8081 to CORS_ORIGIN in Railway, or use the deployed web domain.",
+          });
+          return;
+        }
+
+        if (isApiReachabilityError(error)) {
+          setErrors({
+            email: "",
+            pass: "Could not reach the Railway backend. Check that the API URL is https://autoflow-production-0606.up.railway.app.",
+          });
+          return;
+        }
+
+        const friendlyMessage = message || "Invalid email or password.";
+        setErrors({ email: "", pass: friendlyMessage });
       });
   };
 
@@ -323,13 +373,15 @@ export default function LoginRegister({ onLoginSuccess }) {
 
     setOtpEmail(clean(email));
     setOtpInput("");
-    setOtpServerCode("");
     setOtpVerificationId("");
     setOtpDestination("");
     setOtpStep("email");
   };
 
   const onSendOtp = () => {
+    if (otpBusy) return;
+    setOtpBusy(true);
+
     requestSignupOtp({
       firstName: clean(first),
       lastName: clean(last),
@@ -341,21 +393,25 @@ export default function LoginRegister({ onLoginSuccess }) {
       .then((payload) => {
         setOtpVerificationId(payload.verificationId || "");
         setOtpDestination(payload.destination || clean(email));
-        setOtpServerCode(payload.otpPreview || "");
         setOtpInput("");
         setOtpStep("code");
         setErrKey("otp", "");
       })
       .catch((error) => {
         setErrKey("otp", error.message || "Failed to send OTP.");
+      })
+      .finally(() => {
+        setOtpBusy(false);
       });
   };
 
   const onVerifyOtp = () => {
+    if (otpBusy) return;
     const entered = clean(otpInput);
 
     if (!entered) return setErrKey("otp", "OTP code is required.");
 
+    setOtpBusy(true);
     verifySignupOtp({
       verificationId: otpVerificationId,
       otp: entered,
@@ -374,13 +430,15 @@ export default function LoginRegister({ onLoginSuccess }) {
       })
       .catch((error) => {
         setErrKey("otp", error.message || "Invalid code. Try again.");
+      })
+      .finally(() => {
+        setOtpBusy(false);
       });
   };
 
   const closeOtp = () => {
     setOtpStep("");
     setOtpInput("");
-    setOtpServerCode("");
     setOtpVerificationId("");
     setOtpDestination("");
     setErrKey("otp", "");
@@ -391,16 +449,30 @@ export default function LoginRegister({ onLoginSuccess }) {
     resetErrors();
     setFpEmail(clean(email));
     setFpInput("");
-    setFpServerCode("");
+    setFpVerificationId("");
+    setFpDestination("");
+    setFpPassword("");
+    setFpConfirmPassword("");
+    setFpShowPassword(false);
+    setFpShowConfirmPassword(false);
+    setFpBusy(false);
     setFpStep("email");
   };
 
   const closeForgot = () => {
     setFpStep("");
     setFpInput("");
-    setFpServerCode("");
+    setFpVerificationId("");
+    setFpDestination("");
+    setFpPassword("");
+    setFpConfirmPassword("");
+    setFpShowPassword(false);
+    setFpShowConfirmPassword(false);
+    setFpBusy(false);
     setErrKey("fpEmail", "");
     setErrKey("fpCode", "");
+    setErrKey("fpPass", "");
+    setErrKey("fpConfirm", "");
   };
 
   const onFpEmailChange = (v) => {
@@ -412,28 +484,86 @@ export default function LoginRegister({ onLoginSuccess }) {
   };
 
   const onFpSendOtp = () => {
+    if (fpBusy) return;
     const t = clean(fpEmail);
     if (!t) return setErrKey("fpEmail", "Email is required.");
     if (!emailOk(t)) return setErrKey("fpEmail", "Enter a valid email address.");
 
-    const code = genOtp6();
-    setFpServerCode(code);
-    console.log("FORGOT OTP SENT TO:", t, "CODE:", code);
-
-    setFpInput("");
-    setErrKey("fpCode", "");
-    setFpStep("code");
+    setFpBusy(true);
+    requestPasswordOtp({
+      email: t,
+      purpose: "forgot-password",
+      channel: "email",
+    })
+      .then((payload) => {
+        setFpVerificationId(payload.verificationId || "");
+        setFpDestination(payload.destination || t);
+        setFpInput("");
+        setErrKey("fpEmail", "");
+        setErrKey("fpCode", "");
+        setFpStep("code");
+      })
+      .catch((error) => {
+        setErrKey("fpEmail", error.message || "Failed to send OTP.");
+      })
+      .finally(() => {
+        setFpBusy(false);
+      });
   };
 
   const onFpVerifyOtp = () => {
+    if (fpBusy) return;
     const entered = clean(fpInput);
 
     if (!entered) return setErrKey("fpCode", "OTP code is required.");
-    if (entered !== fpServerCode) return setErrKey("fpCode", "Invalid code. Try again.");
+    setFpBusy(true);
+    verifyPasswordOtp({
+      email: clean(fpEmail),
+      verificationId: fpVerificationId,
+      otp: entered,
+      purpose: "forgot-password",
+    })
+      .then(() => {
+        setErrKey("fpCode", "");
+        setFpPassword("");
+        setFpConfirmPassword("");
+        setFpStep("reset");
+      })
+      .catch((error) => {
+        setErrKey("fpCode", error.message || "Invalid code. Try again.");
+      })
+      .finally(() => {
+        setFpBusy(false);
+      });
+  };
 
-    setErrKey("fpCode", "");
-    setFpStep("");
-    Alert.alert("Verified", `Password reset is not wired to the API yet for ${clean(fpEmail)}.`);
+  const onFpResetPassword = () => {
+    if (fpBusy) return;
+    const nextPassword = String(fpPassword || "");
+    const nextConfirmPassword = String(fpConfirmPassword || "");
+
+    if (!clean(nextPassword)) return setErrKey("fpPass", "Password is required.");
+    if (!passStrong(nextPassword)) return setErrKey("fpPass", "Password is not strong enough.");
+    if (!clean(nextConfirmPassword)) return setErrKey("fpConfirm", "Confirm password is required.");
+    if (nextPassword !== nextConfirmPassword) return setErrKey("fpConfirm", "Passwords do not match.");
+
+    setFpBusy(true);
+    resetPasswordWithOtp({
+      email: clean(fpEmail),
+      verificationId: fpVerificationId,
+      otp: clean(fpInput),
+      password: nextPassword,
+    })
+      .then(() => {
+        closeForgot();
+        Alert.alert("Password updated", "Your password has been changed successfully.");
+      })
+      .catch((error) => {
+        setErrKey("fpPass", error.message || "Failed to reset password.");
+      })
+      .finally(() => {
+        setFpBusy(false);
+      });
   };
 
   const switchMode = (m) => {
@@ -446,6 +576,65 @@ export default function LoginRegister({ onLoginSuccess }) {
 
   // ✅ rules UI (shown only after typing in register)
   const rules = passRules(pass);
+
+  const openApiSettings = () => {
+    setApiUrlInput(getApiBaseUrl());
+    setApiStatus("");
+    setApiStatusTone("neutral");
+    setApiSettingsOpen(true);
+  };
+
+  const useDetectedLanApi = () => {
+    setApiUrlInput(getSuggestedApiBaseUrl());
+    setApiStatus("");
+    setApiStatusTone("neutral");
+  };
+
+  const useTunnelTemplate = () => {
+    setApiUrlInput("https://your-backend-tunnel-url");
+    setApiStatus("Paste your ngrok or Cloudflare Tunnel URL, then test it.");
+    setApiStatusTone("neutral");
+  };
+
+  const applyApiUrl = () => {
+    const nextUrl = setApiBaseUrl(apiUrlInput);
+    setApiUrlInput(nextUrl);
+    if (!nextUrl) {
+      setApiStatus("No API URL is configured yet. Use your Railway backend URL.");
+      setApiStatusTone("error");
+      return;
+    }
+    setApiStatus(`Using API: ${nextUrl}`);
+    setApiStatusTone("success");
+  };
+
+  const testApiConnection = async () => {
+    const nextUrl = setApiBaseUrl(apiUrlInput);
+    setApiUrlInput(nextUrl);
+    setApiTestBusy(true);
+    setApiStatus("");
+    setApiStatusTone("neutral");
+
+    try {
+      await apiRequest("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email: "__ping__", password: "__ping__" }),
+      });
+      setApiStatus(`Connected to ${nextUrl}`);
+      setApiStatusTone("success");
+    } catch (error) {
+      const message = String(error?.message || "");
+      if (message.toLowerCase().includes("invalid") || message.toLowerCase().includes("incorrect")) {
+        setApiStatus(`Connected to ${nextUrl}`);
+        setApiStatusTone("success");
+      } else {
+        setApiStatus(message || `Could not reach ${nextUrl}`);
+        setApiStatusTone("error");
+      }
+    } finally {
+      setApiTestBusy(false);
+    }
+  };
 
   const PasswordRulesUI =
     mode !== "register" || !passTouched ? null : (
@@ -538,9 +727,11 @@ export default function LoginRegister({ onLoginSuccess }) {
 
                       <View style={[styles.inlineActionRow, compact && styles.inlineActionRowCompact]}>
                         <Text style={[styles.helperText, compact && styles.helperTextCompact]}>Use your registered email and password to continue.</Text>
-                        <TouchableOpacity activeOpacity={0.85} onPress={openForgot} style={styles.linkBtnInline}>
-                          <Text style={styles.linkTxt}>Forgot Password?</Text>
-                        </TouchableOpacity>
+                        <View style={styles.inlineLinks}>
+                          <TouchableOpacity activeOpacity={0.85} onPress={openForgot} style={styles.linkBtnInline}>
+                            <Text style={styles.linkTxt}>Forgot Password?</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
 
                       <TouchableOpacity activeOpacity={0.85} onPress={onLogin} style={styles.primaryBtn}>
@@ -655,9 +846,6 @@ export default function LoginRegister({ onLoginSuccess }) {
                 </View>
               </View>
 
-              <TouchableOpacity activeOpacity={0.85} onPress={() => console.log("CONTACT US")} style={styles.helpBtn}>
-                <Text style={styles.helpTxt}>Need help? Contact Us</Text>
-              </TouchableOpacity>
             </View>
           </ScrollView>
 
@@ -683,8 +871,8 @@ export default function LoginRegister({ onLoginSuccess }) {
                     <Text style={styles.modalBtnGhostTxt}>Cancel</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity activeOpacity={0.85} onPress={onSendOtp} style={styles.modalBtn}>
-                    <Text style={styles.modalBtnTxt}>Send OTP</Text>
+                  <TouchableOpacity activeOpacity={0.85} disabled={otpBusy} onPress={onSendOtp} style={[styles.modalBtn, otpBusy && { opacity: 0.65 }]}>
+                    <Text style={styles.modalBtnTxt}>{otpBusy ? "Sending..." : "Send OTP"}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -714,13 +902,13 @@ export default function LoginRegister({ onLoginSuccess }) {
                     <Text style={styles.modalBtnGhostTxt}>Cancel</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity activeOpacity={0.85} onPress={onVerifyOtp} style={styles.modalBtn}>
-                    <Text style={styles.modalBtnTxt}>Continue</Text>
+                  <TouchableOpacity activeOpacity={0.85} disabled={otpBusy} onPress={onVerifyOtp} style={[styles.modalBtn, otpBusy && { opacity: 0.65 }]}>
+                    <Text style={styles.modalBtnTxt}>{otpBusy ? "Verifying..." : "Continue"}</Text>
                   </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity activeOpacity={0.85} onPress={onSendOtp} style={styles.resendBtn}>
-                  <Text style={styles.resendTxt}>Resend code</Text>
+                <TouchableOpacity activeOpacity={0.85} disabled={otpBusy} onPress={onSendOtp} style={[styles.resendBtn, otpBusy && { opacity: 0.6 }]}>
+                  <Text style={styles.resendTxt}>{otpBusy ? "Sending..." : "Resend code"}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -758,10 +946,11 @@ export default function LoginRegister({ onLoginSuccess }) {
 
                   <TouchableOpacity
                     activeOpacity={0.85}
+                    disabled={fpBusy}
                     onPress={onFpSendOtp}
-                    style={styles.modalBtn}
+                    style={[styles.modalBtn, fpBusy && { opacity: 0.65 }]}
                   >
-                    <Text style={styles.modalBtnTxt}>Send OTP</Text>
+                    <Text style={styles.modalBtnTxt}>{fpBusy ? "Sending..." : "Send OTP"}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -774,7 +963,7 @@ export default function LoginRegister({ onLoginSuccess }) {
               <View style={styles.modalCard}>
                 <Text style={styles.modalTitle}>Enter Security Code</Text>
                 <Text style={styles.modalSub}>
-                  Please check your email for a message with{"\n"}your code.
+                  Please check {fpDestination || fpEmail || "your email"} for a message with{"\n"}your code.
                 </Text>
 
                 <Field
@@ -797,19 +986,163 @@ export default function LoginRegister({ onLoginSuccess }) {
 
                   <TouchableOpacity
                     activeOpacity={0.85}
+                    disabled={fpBusy}
                     onPress={onFpVerifyOtp}
-                    style={styles.modalBtn}
+                    style={[styles.modalBtn, fpBusy && { opacity: 0.65 }]}
                   >
-                    <Text style={styles.modalBtnTxt}>Continue</Text>
+                    <Text style={styles.modalBtnTxt}>{fpBusy ? "Verifying..." : "Continue"}</Text>
                   </TouchableOpacity>
                 </View>
 
                 <TouchableOpacity
                   activeOpacity={0.85}
+                  disabled={fpBusy}
                   onPress={onFpSendOtp}
-                  style={styles.resendBtn}
+                  style={[styles.resendBtn, fpBusy && { opacity: 0.6 }]}
                 >
-                  <Text style={styles.resendTxt}>Resend code</Text>
+                  <Text style={styles.resendTxt}>{fpBusy ? "Sending..." : "Resend code"}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+
+          <Modal visible={fpStep === "reset"} transparent animationType="fade">
+            <Pressable style={styles.modalOverlay} onPress={closeForgot} />
+            <View style={styles.modalCenter}>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>Create New Password</Text>
+                <Text style={styles.modalSub}>
+                  Your code has been verified. Enter a new password for {fpEmail || "your account"}.
+                </Text>
+
+                <PasswordField
+                  label="New Password"
+                  value={fpPassword}
+                  onChangeText={(v) => {
+                    setFpPassword(v);
+                    if (!clean(v)) setErrKey("fpPass", "Password is required.");
+                    else if (!passStrong(v)) setErrKey("fpPass", "Password is not strong enough.");
+                    else setErrKey("fpPass", "");
+
+                    if (clean(fpConfirmPassword)) {
+                      if (v !== fpConfirmPassword) setErrKey("fpConfirm", "Passwords do not match.");
+                      else setErrKey("fpConfirm", "");
+                    }
+                  }}
+                  placeholder="Enter your new password"
+                  show={fpShowPassword}
+                  onToggle={() => setFpShowPassword((s) => !s)}
+                  error={errors.fpPass}
+                />
+
+                <PasswordField
+                  label="Confirm Password"
+                  value={fpConfirmPassword}
+                  onChangeText={(v) => {
+                    setFpConfirmPassword(v);
+                    if (!clean(v)) setErrKey("fpConfirm", "Confirm password is required.");
+                    else if (v !== fpPassword) setErrKey("fpConfirm", "Passwords do not match.");
+                    else setErrKey("fpConfirm", "");
+                  }}
+                  placeholder="Confirm your new password"
+                  show={fpShowConfirmPassword}
+                  onToggle={() => setFpShowConfirmPassword((s) => !s)}
+                  error={errors.fpConfirm}
+                />
+
+                <View style={styles.modalBtnRow}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={closeForgot}
+                    style={[styles.modalBtn, styles.modalBtnGhost]}
+                  >
+                    <Text style={styles.modalBtnGhostTxt}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    disabled={fpBusy}
+                    onPress={onFpResetPassword}
+                    style={[styles.modalBtn, fpBusy && { opacity: 0.65 }]}
+                  >
+                    <Text style={styles.modalBtnTxt}>{fpBusy ? "Updating..." : "Update Password"}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+
+          <Modal visible={apiSettingsOpen} transparent animationType="fade" onRequestClose={() => setApiSettingsOpen(false)}>
+            <Pressable style={styles.modalOverlay} onPress={() => setApiSettingsOpen(false)} />
+            <View style={styles.modalCenter}>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>{releaseBuild ? "Server Settings" : "Connection Settings"}</Text>
+                <Text style={styles.modalSub}>
+                  {releaseBuild
+                    ? "Enter the public HTTPS backend address for this app build."
+                    : "Enter the backend API address your device can actually reach."}
+                </Text>
+
+                <Field
+                  label="API Base URL"
+                  value={apiUrlInput}
+                  onChangeText={(value) => {
+                    setApiUrlInput(value);
+                    setApiStatus("");
+                    setApiStatusTone("neutral");
+                  }}
+                  placeholder="https://autoflow-production-0606.up.railway.app"
+                  keyboardType="url"
+                />
+
+                <>
+                  <Text style={styles.apiHint}>
+                    This app now uses the deployed Railway backend.
+                  </Text>
+                  <Text style={styles.apiHint}>
+                    Default API: `https://autoflow-production-0606.up.railway.app`
+                  </Text>
+                  <Text style={styles.apiHint}>
+                    Resend OTP stays on the backend, so no email API keys are stored in the app.
+                  </Text>
+
+                  <TouchableOpacity activeOpacity={0.85} onPress={useTunnelTemplate} style={styles.secondaryBtn}>
+                    <Text style={styles.secondaryBtnTxt}>Use Railway Default</Text>
+                  </TouchableOpacity>
+                </>
+
+                {!!apiStatus && (
+                  <Text
+                    style={[
+                      styles.apiStatus,
+                      apiStatusTone === "success" ? styles.apiStatusSuccess : styles.apiStatusError,
+                    ]}
+                  >
+                    {apiStatus}
+                  </Text>
+                )}
+
+                <View style={styles.modalBtnRow}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => setApiSettingsOpen(false)}
+                    style={[styles.modalBtn, styles.modalBtnGhost]}
+                  >
+                    <Text style={styles.modalBtnGhostTxt}>Close</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity activeOpacity={0.85} onPress={applyApiUrl} style={styles.modalBtn}>
+                    <Text style={styles.modalBtnTxt}>Use This URL</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => void testApiConnection()}
+                  style={styles.secondaryBtn}
+                  disabled={apiTestBusy}
+                >
+                  <Text style={styles.secondaryBtnTxt}>{apiTestBusy ? "Testing..." : "Test Connection"}</Text>
                 </TouchableOpacity>
               </View>
             </View>

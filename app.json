@@ -1,23 +1,37 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
-    "version": "1.0.0",
+    "name": "All Pro-Tec",
+    "slug": "all-pro-tec-mobile",
+    "owner": "inf232",
+    "scheme": "allprotec",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.allprotec.mobile",
+      "buildNumber": "1.0.1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.allprotec.mobile",
-      "versionCode": 1,
+      "versionCode": 2,
+      "usesCleartextTraffic": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -28,7 +42,13 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "apiUrl": ""
+      "eas": {
+        "projectId": "28ccf282-e734-4b16-b9da-f50763c3c485"
+      },
+      "apiUrl": "https://autoflow-production-0606.up.railway.app",
+      "publicClientUrl": "https://allprotecph.com",
+      "appVariant": "production",
+      "allowLocalNetwork": false
     },
     "plugins": [
       "expo-font"

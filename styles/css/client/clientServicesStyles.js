@@ -62,6 +62,17 @@ export default StyleSheet.create({
     borderRadius: 18,
     padding: 16,
   },
+  section: { marginTop: 14 },
+  sectionTitle: { fontSize: 17, fontWeight: "950", color: "#111827" },
+  emptyCard: {
+    marginTop: 12,
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 18,
+    padding: 16,
+  },
+  emptyTxt: { fontSize: 13, fontWeight: "700", color: "#6B7280" },
 
   serviceName: { fontSize: 18, fontWeight: "950", color: "#111827" },
   serviceDesc: { marginTop: 2, fontSize: 14, fontWeight: "600", color: "#6B7280" },

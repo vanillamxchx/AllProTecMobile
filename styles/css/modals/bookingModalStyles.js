@@ -104,7 +104,7 @@ export default StyleSheet.create({
 
   row: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
     paddingVertical: 6,
@@ -123,6 +123,10 @@ export default StyleSheet.create({
     fontWeight: "800",
     color: "#111827",
     textAlign: "right",
+  },
+  valueCode: {
+    fontFamily: "monospace",
+    fontSize: 11,
   },
 
   statusPill: {

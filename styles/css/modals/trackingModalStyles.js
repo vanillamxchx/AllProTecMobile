@@ -1,4 +1,4 @@
-import { StyleSheet, Platform } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 
 export default StyleSheet.create({
   root: { flex: 1 },
@@ -18,13 +18,13 @@ export default StyleSheet.create({
   card: {
     width: "100%",
     maxWidth: 520,
+    maxHeight: "88%",
     backgroundColor: "#FFF",
-    borderRadius: 46,
-    paddingVertical: 26,
-    paddingHorizontal: 26,
+    borderRadius: 32,
+    paddingVertical: 24,
+    paddingHorizontal: 22,
     borderWidth: 2,
     borderColor: "#111827",
-
     shadowColor: "#000",
     shadowOpacity: Platform.OS === "web" ? 0.35 : 0.3,
     shadowRadius: 18,
@@ -46,7 +46,7 @@ export default StyleSheet.create({
   },
 
   label: {
-    width: 165,
+    width: 110,
     fontSize: 12,
     fontWeight: "950",
     color: "#111827",
@@ -59,7 +59,204 @@ export default StyleSheet.create({
     color: "#6B7280",
   },
 
-  /* ✅ STATUS BADGE (names that your TrackingModal uses) */
+  section: {
+    marginTop: 18,
+    gap: 8,
+  },
+
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "950",
+    color: "#111827",
+    marginBottom: 4,
+  },
+
+  qrSection: {
+    marginTop: 18,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+  },
+
+  qrImage: {
+    width: 180,
+    height: 180,
+    marginBottom: 10,
+  },
+
+  linkTxt: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#3158D8",
+    textAlign: "center",
+  },
+
+  timeline: {
+    gap: 8,
+  },
+
+  timelineItem: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#F9FAFB",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+
+  timelineItemActive: {
+    borderColor: "#D7B24A",
+    backgroundColor: "#FFF7DD",
+  },
+
+  timelineTxt: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#6B7280",
+  },
+
+  timelineTxtActive: {
+    color: "#111827",
+  },
+
+  panelText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#374151",
+    lineHeight: 18,
+  },
+
+  markerList: {
+    gap: 8,
+  },
+
+  markerCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#F8FAFC",
+    padding: 12,
+  },
+
+  markerTitle: {
+    fontSize: 12,
+    fontWeight: "950",
+    color: "#111827",
+  },
+
+  markerMeta: {
+    marginTop: 3,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#64748B",
+  },
+
+  markerNote: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#374151",
+    lineHeight: 16,
+  },
+
+  emptyTxt: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6B7280",
+    lineHeight: 18,
+  },
+
+  detailGrid: {
+    gap: 8,
+  },
+
+  detailChip: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+    padding: 12,
+  },
+
+  detailChipLabel: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#64748B",
+  },
+
+  detailChipValue: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#111827",
+    lineHeight: 18,
+  },
+
+  checklistWrap: {
+    gap: 8,
+  },
+
+  checklistItem: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+    padding: 12,
+  },
+
+  checklistHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+
+  checklistLabel: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#111827",
+  },
+
+  checklistMeta: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748B",
+  },
+
+  doneYes: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#047857",
+  },
+
+  doneNo: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#B45309",
+  },
+
+  notePanel: {
+    marginTop: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#F8FAFC",
+    padding: 12,
+    gap: 6,
+  },
+
+  panelBullet: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#374151",
+    lineHeight: 16,
+  },
+
   statusBadge: {
     paddingHorizontal: 18,
     paddingVertical: 7,
@@ -73,15 +270,15 @@ export default StyleSheet.create({
     color: "#111827",
   },
 
-  statusProgress: { backgroundColor: "#DBEAFE" },  // blue
-  statusCompleted: { backgroundColor: "#DCFCE7" }, // green
-  statusArrived: { backgroundColor: "#FEF3C7" },   // yellow
-  statusBooked: { backgroundColor: "#FED7AA" },    // orange
-  statusDefault: { backgroundColor: "#E5E7EB" },   // gray
+  statusProgress: { backgroundColor: "#DBEAFE" },
+  statusCompleted: { backgroundColor: "#DCFCE7" },
+  statusArrived: { backgroundColor: "#FEF3C7" },
+  statusBooked: { backgroundColor: "#FED7AA" },
+  statusDefault: { backgroundColor: "#E5E7EB" },
 
   actions: {
     marginTop: 18,
-    alignItems: "flex-end",
+    alignItems: "center",
   },
 
   closeBtn: {
@@ -93,7 +290,6 @@ export default StyleSheet.create({
     borderColor: "#B38B1F",
     alignItems: "center",
     justifyContent: "center",
-
     shadowColor: "#000",
     shadowOpacity: Platform.OS === "web" ? 0.25 : 0.2,
     shadowRadius: 8,

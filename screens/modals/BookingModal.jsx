@@ -2,13 +2,6 @@ import React, { useMemo } from "react";
 import { Modal, View, Text, Pressable, TouchableOpacity, ScrollView, Image } from "react-native";
 import styles from "../../styles/css/modals/bookingModalStyles.js";
 
-const BOOKING_CAR_IMAGE = require("../../assets/gallery/car.jpg");
-
-function getMarkerTone(index) {
-  const tones = ["#2563EB", "#F97316", "#10B981", "#A855F7", "#EF4444", "#14B8A6"];
-  return tones[index % tones.length];
-}
-
 function normalizeChecklist(booking) {
   if (Array.isArray(booking?.serviceChecklist)) return booking.serviceChecklist.filter(Boolean);
   if (Array.isArray(booking?.checklist)) return booking.checklist.filter(Boolean);
@@ -43,6 +36,18 @@ function formatMoney(value) {
   return amount > 0 ? `PHP ${amount.toLocaleString()}` : "PHP 0";
 }
 
+function formatDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "-";
+  const nextDate = new Date(raw);
+  if (Number.isNaN(nextDate.getTime())) return raw;
+  return nextDate.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 function statusTone(status) {
   const value = String(status || "").toLowerCase();
   if (value.includes("complete") || value.includes("paid")) return styles.statusDone;
@@ -51,59 +56,13 @@ function statusTone(status) {
   return styles.statusDefault;
 }
 
-function VehicleMapPreview({ markers = [], issueTypes = [] }) {
-  const safeMarkers =
-    Array.isArray(markers) && markers.length > 0
-      ? markers
-      : [{ id: 1, x: 50, y: 50, issueType: "" }];
-
-  return (
-    <View style={styles.mapWrap}>
-      <View style={styles.mapPanel}>
-        <View style={styles.carCanvas}>
-          <Image source={BOOKING_CAR_IMAGE} style={styles.carImage} resizeMode="contain" />
-
-          {safeMarkers.map((marker, index) => (
-            <View
-              key={`${marker.id || index}-${marker.x}-${marker.y}`}
-              style={[
-                styles.markerDot,
-                {
-                  left: `${marker.x}%`,
-                  top: `${marker.y}%`,
-                  backgroundColor: getMarkerTone(index),
-                },
-              ]}
-            >
-              <Text style={styles.markerDotText}>{marker.id || index + 1}</Text>
-            </View>
-          ))}
-        </View>
-
-        <Text style={styles.mapHint}>
-          Review the marked spots on the same car diagram used in web booking to identify the exact damaged area.
-        </Text>
-      </View>
-
-      <View style={styles.markerLegend}>
-        {safeMarkers.map((marker, index) => (
-          <View key={`${marker.id || index}-legend`} style={styles.markerLegendItem}>
-            <View style={[styles.markerLegendSwatch, { backgroundColor: getMarkerTone(index) }]} />
-            <Text style={styles.markerLegendText}>
-              {marker.issueType || issueTypes[index] || `Marker ${marker.id || index + 1}`}
-            </Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
 function DetailRow({ label, value, valueStyle }) {
+  const displayValue =
+    value === null || value === undefined || String(value).trim() === "" ? "-" : String(value);
   return (
     <View style={styles.row}>
       <Text style={styles.label}>{label}</Text>
-      <Text style={[styles.value, valueStyle]}>{value || "-"}</Text>
+      <Text style={[styles.value, valueStyle]}>{displayValue}</Text>
     </View>
   );
 }
@@ -120,14 +79,10 @@ function Section({ title, children }) {
 export default function BookingModal({ visible, booking, onClose }) {
   const checklist = useMemo(() => normalizeChecklist(booking), [booking]);
   const warranty = useMemo(() => normalizeWarranty(booking), [booking]);
-  const hasIssueData = useMemo(
-    () =>
-      Array.isArray(booking?.issueMarkers) && booking.issueMarkers.length > 0
-        ? true
-        : Boolean(String(booking?.issueNote || "").trim()),
-    [booking]
+  const displayDate = useMemo(
+    () => formatDate(booking?.rawDate || booking?.date),
+    [booking?.date, booking?.rawDate]
   );
-
   if (!visible) return null;
 
   return (
@@ -148,10 +103,18 @@ export default function BookingModal({ visible, booking, onClose }) {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
+              {booking?._id ? (
+                <Section title="Record Reference">
+                  <DetailRow label="Mongo ID:" value={booking._id} valueStyle={styles.valueCode} />
+                  <DetailRow label="Booking ID:" value={booking?.id} valueStyle={styles.valueCode} />
+                </Section>
+              ) : null}
+
               <Section title="Appointment">
-                <DetailRow label="Booking ID:" value={booking?.id} />
-                <DetailRow label="Booking Date:" value={booking?.date} />
+                {!booking?._id ? <DetailRow label="Booking ID:" value={booking?.id} /> : null}
+                <DetailRow label="Booking Date:" value={displayDate} />
                 <DetailRow label="Time:" value={booking?.time || "-"} />
+                <DetailRow label="Place Slot:" value={booking?.placeSlot ? String(booking.placeSlot) : "-"} />
                 <View style={styles.row}>
                   <Text style={styles.label}>Status:</Text>
                   <View style={[styles.statusPill, statusTone(booking?.status)]}>
@@ -159,14 +122,20 @@ export default function BookingModal({ visible, booking, onClose }) {
                   </View>
                 </View>
                 <DetailRow label="Amount:" value={formatMoney(booking?.amount)} />
+                {Number(booking?.originalAmount || 0) > 0 &&
+                Number(booking?.originalAmount || 0) !== Number(booking?.amount || 0) ? (
+                  <DetailRow label="Original Amount:" value={formatMoney(booking?.originalAmount)} />
+                ) : null}
               </Section>
 
               <Section title="Customer And Vehicle">
                 <DetailRow label="Customer:" value={booking?.customer} />
+                <DetailRow label="Customer Email:" value={booking?.customerEmail} />
                 <DetailRow label="Vehicle Model:" value={booking?.vehicleModel || booking?.vehicle} />
                 <DetailRow label="Plate Number:" value={booking?.plate} />
                 <DetailRow label="Car Size:" value={booking?.carSize} />
                 <DetailRow label="Service:" value={booking?.service} />
+                <DetailRow label="Promo ID:" value={booking?.promoId} />
                 <DetailRow label="Assigned To:" value={booking?.assignedTo || booking?.assigned} />
               </Section>
 
@@ -176,11 +145,6 @@ export default function BookingModal({ visible, booking, onClose }) {
                 </Section>
               ) : null}
 
-              {hasIssueData ? (
-                <Section title="Vehicle Issue Map">
-                  <VehicleMapPreview markers={booking?.issueMarkers} issueTypes={booking?.issueTypes} />
-                </Section>
-              ) : null}
 
               {checklist.length ? (
                 <Section title="Service Checklist">
