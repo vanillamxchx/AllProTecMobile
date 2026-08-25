@@ -1,0 +1,822 @@
+// screens/LogInRegister.js (or LoginRegister.jsx) — UPDATED
+import React, { useMemo, useState } from "react";
+import {
+  SafeAreaView,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  useWindowDimensions,
+  KeyboardAvoidingView,
+  Platform,
+  Modal,
+  Pressable,
+  Alert,
+  ImageBackground,
+} from "react-native";
+
+import AuthHeader from "../components/AuthHeader.jsx";
+import AuthFooter from "../components/AuthFooter.jsx";
+import styles from "../styles/css/loginRegisterStyles.js";
+import {
+  loginWithApi,
+  requestSignupOtp,
+  verifySignupOtp,
+} from "../context/MobileDataContext.jsx";
+
+const AUTH_BG = require("../styles/images/bg.png");
+
+/* =======================
+   Small UI Helpers
+======================= */
+function TabBtn({ active, label, onPress }) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={onPress}
+      style={[styles.tabBtn, active && styles.tabBtnActive]}
+    >
+      <Text style={[styles.tabText, active && styles.tabTextActive]}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+function Field({ label, value, onChangeText, placeholder, keyboardType, error }) {
+  return (
+    <View style={styles.field}>
+      {!!label && <Text style={styles.label}>{label}</Text>}
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#9AA0A6"
+        style={[styles.input, error && styles.inputError]}
+        autoCapitalize="none"
+        keyboardType={keyboardType}
+      />
+      {!!error && <Text style={styles.errorTxt}>{error}</Text>}
+    </View>
+  );
+}
+
+function PasswordField({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  show,
+  onToggle,
+  error,
+  below,
+}) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+
+      <View style={styles.passRow}>
+        <TextInput
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor="#9AA0A6"
+          style={[styles.input, styles.passInput, error && styles.inputError]}
+          autoCapitalize="none"
+          secureTextEntry={!show}
+        />
+
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={onToggle}
+          style={styles.showBtn}
+        >
+          <Text style={styles.showTxt}>{show ? "Hide" : "Show"}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {!!error && <Text style={styles.errorTxt}>{error}</Text>}
+      {!!below && below}
+    </View>
+  );
+}
+
+/* =======================
+   Validators + Helpers
+======================= */
+const clean = (v) => String(v ?? "").trim();
+
+const emailOk = (v) =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || "").trim());
+
+const phoneOk = (v) => {
+  const p = String(v || "").trim();
+  return p.length === 11 && p.startsWith("09") && /^\d{11}$/.test(p);
+};
+
+const genOtp6 = () => String(Math.floor(100000 + Math.random() * 900000));
+
+const validateName = (label, value) => {
+  const v = clean(value);
+  if (!v) return `${label} is required.`;
+  if (v.length < 2) return `${label} must be at least 2 characters.`;
+  if (v.length > 55) return `${label} must be at most 55 characters.`;
+  return "";
+};
+
+const passRules = (v) => {
+  const s = String(v || "");
+  return {
+    min8: s.length >= 8,
+    upper: /[A-Z]/.test(s),
+    lower: /[a-z]/.test(s),
+    special: /[^A-Za-z0-9]/.test(s),
+  };
+};
+
+const passStrong = (v) => {
+  const r = passRules(v);
+  return r.min8 && r.upper && r.lower && r.special;
+};
+
+const normalizePermission = (userType, role) => {
+  const normalizedUserType = String(userType || "").trim().toLowerCase();
+  if (["admin", "staff", "client", "customer"].includes(normalizedUserType)) {
+    return normalizedUserType === "customer" ? "client" : normalizedUserType;
+  }
+
+  const normalizedRole = String(role || "").trim().toLowerCase();
+  if (["admin", "owner", "co-owner"].includes(normalizedRole)) return "admin";
+  if (["staff", "mechanic", "inspector", "coordinator"].includes(normalizedRole)) return "staff";
+  return "client";
+};
+
+/* =======================
+   Screen
+======================= */
+export default function LoginRegister({ onLoginSuccess }) {
+  const [mode, setMode] = useState("login");
+
+  // shared
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
+  const [showPass, setShowPass] = useState(false);
+
+  // ✅ NEW: show password rules only after typing in register
+  const [passTouched, setPassTouched] = useState(false);
+
+  // register
+  const [first, setFirst] = useState("");
+  const [last, setLast] = useState("");
+  const [phone, setPhone] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  // errors
+  const [errors, setErrors] = useState({});
+
+  // SIGN UP OTP flow: "" | "email" | "code"
+  const [otpStep, setOtpStep] = useState("");
+  const [otpEmail, setOtpEmail] = useState("");
+  const [otpServerCode, setOtpServerCode] = useState("");
+  const [otpInput, setOtpInput] = useState("");
+  const [otpVerificationId, setOtpVerificationId] = useState("");
+  const [otpDestination, setOtpDestination] = useState("");
+
+  // ✅ FORGOT PASSWORD flow: "" | "email" | "code"
+  const [fpStep, setFpStep] = useState("");
+  const [fpEmail, setFpEmail] = useState("");
+  const [fpServerCode, setFpServerCode] = useState("");
+  const [fpInput, setFpInput] = useState("");
+
+  const { width } = useWindowDimensions();
+  const clamp = (n, min, max) => Math.min(Math.max(n, min), max);
+  const stageW = useMemo(() => clamp(width, 320, 420), [width]);
+  const compact = width <= 430;
+
+  const resetErrors = () => setErrors({});
+
+  const setErrKey = (key, msg) => {
+    setErrors((prev) => {
+      const next = { ...prev };
+      if (!msg) delete next[key];
+      else next[key] = msg;
+      return next;
+    });
+  };
+
+  /* =======================
+     LIVE handlers
+  ======================= */
+  const onEmailChange = (v) => {
+    setEmail(v);
+    const t = clean(v);
+    if (!t) return setErrKey("email", "Email is required.");
+    if (!emailOk(t)) return setErrKey("email", "Enter a valid email address.");
+    setErrKey("email", "");
+  };
+
+  const onPhoneChange = (v) => {
+    const digits = String(v || "").replace(/[^\d]/g, "").slice(0, 11);
+    setPhone(digits);
+
+    if (!digits) return setErrKey("phone", "Phone is required.");
+    if (!digits.startsWith("09")) return setErrKey("phone", "Phone must start with 09.");
+    if (digits.length < 11) return setErrKey("phone", "Phone must be 11 digits.");
+    if (!phoneOk(digits)) return setErrKey("phone", "Phone must start with 09 and be 11 digits.");
+    setErrKey("phone", "");
+  };
+
+  const onPassChange = (v) => {
+    setPass(v);
+
+    // ✅ only show rules after user starts typing (register only)
+    if (mode === "register" && !passTouched && String(v || "").length > 0) {
+      setPassTouched(true);
+    }
+
+    const t = clean(v);
+
+    // ✅ do not show "not strong enough" until user typed at least once
+    if (!t) setErrKey("pass", "Password is required.");
+    else if (mode === "register" && passTouched && !passStrong(v))
+      setErrKey("pass", "Password is not strong enough.");
+    else setErrKey("pass", "");
+
+    // live confirm match
+    if (mode === "register" && clean(confirm)) {
+      if (clean(confirm) !== t) setErrKey("confirm", "Passwords do not match.");
+      else setErrKey("confirm", "");
+    }
+  };
+
+  const onConfirmChange = (v) => {
+    setConfirm(v);
+    const t = clean(v);
+
+    if (!t) return setErrKey("confirm", "Confirm password is required.");
+    if (clean(pass) !== t) return setErrKey("confirm", "Passwords do not match.");
+    setErrKey("confirm", "");
+  };
+
+  /* =======================
+     Submit validation
+  ======================= */
+  const validateLogin = () => {
+    const e = {};
+    if (!clean(email)) e.email = "Email is required.";
+    if (!clean(pass)) e.pass = "Password is required.";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const validateRegister = () => {
+    const e = {};
+
+    const firstErr = validateName("First name", first);
+    if (firstErr) e.first = firstErr;
+
+    const lastErr = validateName("Last name", last);
+    if (lastErr) e.last = lastErr;
+
+    if (!clean(email)) e.email = "Email is required.";
+    else if (!emailOk(email)) e.email = "Enter a valid email address.";
+
+    if (!clean(phone)) e.phone = "Phone is required.";
+    else if (!phoneOk(phone)) e.phone = "Phone must start with 09 and be 11 digits.";
+
+    if (!clean(pass)) e.pass = "Password is required.";
+    else if (!passStrong(pass)) e.pass = "Password is not strong enough.";
+
+    if (!clean(confirm)) e.confirm = "Confirm password is required.";
+    else if (clean(pass) !== clean(confirm)) e.confirm = "Passwords do not match.";
+
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const onLogin = () => {
+    resetErrors();
+    if (!validateLogin()) return;
+
+    loginWithApi(clean(email), String(pass || ""))
+      .then((payload) => {
+        const user = payload.user || {};
+        const permission = normalizePermission(user.userType, user.role);
+        onLoginSuccess?.({
+          ...user,
+          userType: permission,
+          role: permission,
+          subRole: String(user.role || "").trim().toLowerCase(),
+        });
+      })
+      .catch((error) => {
+        setErrors({ email: "", pass: error.message || "Invalid email or password." });
+      });
+  };
+
+  // Create Account -> start SIGN UP otp flow
+  const onCreateAccount = () => {
+    resetErrors();
+    if (!validateRegister()) return;
+
+    setOtpEmail(clean(email));
+    setOtpInput("");
+    setOtpServerCode("");
+    setOtpVerificationId("");
+    setOtpDestination("");
+    setOtpStep("email");
+  };
+
+  const onSendOtp = () => {
+    requestSignupOtp({
+      firstName: clean(first),
+      lastName: clean(last),
+      email: clean(email),
+      phone: clean(phone),
+      password: String(pass || ""),
+      channel: "email",
+    })
+      .then((payload) => {
+        setOtpVerificationId(payload.verificationId || "");
+        setOtpDestination(payload.destination || clean(email));
+        setOtpServerCode(payload.otpPreview || "");
+        setOtpInput("");
+        setOtpStep("code");
+        setErrKey("otp", "");
+      })
+      .catch((error) => {
+        setErrKey("otp", error.message || "Failed to send OTP.");
+      });
+  };
+
+  const onVerifyOtp = () => {
+    const entered = clean(otpInput);
+
+    if (!entered) return setErrKey("otp", "OTP code is required.");
+
+    verifySignupOtp({
+      verificationId: otpVerificationId,
+      otp: entered,
+    })
+      .then((payload) => {
+        const user = payload.user || {};
+        const permission = normalizePermission(user.userType, user.role);
+        setErrKey("otp", "");
+        setOtpStep("");
+        onLoginSuccess?.({
+          ...user,
+          userType: permission,
+          role: permission,
+          subRole: String(user.role || "").trim().toLowerCase(),
+        });
+      })
+      .catch((error) => {
+        setErrKey("otp", error.message || "Invalid code. Try again.");
+      });
+  };
+
+  const closeOtp = () => {
+    setOtpStep("");
+    setOtpInput("");
+    setOtpServerCode("");
+    setOtpVerificationId("");
+    setOtpDestination("");
+    setErrKey("otp", "");
+  };
+
+  // ✅ FORGOT PASSWORD
+  const openForgot = () => {
+    resetErrors();
+    setFpEmail(clean(email));
+    setFpInput("");
+    setFpServerCode("");
+    setFpStep("email");
+  };
+
+  const closeForgot = () => {
+    setFpStep("");
+    setFpInput("");
+    setFpServerCode("");
+    setErrKey("fpEmail", "");
+    setErrKey("fpCode", "");
+  };
+
+  const onFpEmailChange = (v) => {
+    setFpEmail(v);
+    const t = clean(v);
+    if (!t) return setErrKey("fpEmail", "Email is required.");
+    if (!emailOk(t)) return setErrKey("fpEmail", "Enter a valid email address.");
+    setErrKey("fpEmail", "");
+  };
+
+  const onFpSendOtp = () => {
+    const t = clean(fpEmail);
+    if (!t) return setErrKey("fpEmail", "Email is required.");
+    if (!emailOk(t)) return setErrKey("fpEmail", "Enter a valid email address.");
+
+    const code = genOtp6();
+    setFpServerCode(code);
+    console.log("FORGOT OTP SENT TO:", t, "CODE:", code);
+
+    setFpInput("");
+    setErrKey("fpCode", "");
+    setFpStep("code");
+  };
+
+  const onFpVerifyOtp = () => {
+    const entered = clean(fpInput);
+
+    if (!entered) return setErrKey("fpCode", "OTP code is required.");
+    if (entered !== fpServerCode) return setErrKey("fpCode", "Invalid code. Try again.");
+
+    setErrKey("fpCode", "");
+    setFpStep("");
+    Alert.alert("Verified", `Password reset is not wired to the API yet for ${clean(fpEmail)}.`);
+  };
+
+  const switchMode = (m) => {
+    setMode(m);
+    resetErrors();
+
+    // ✅ reset password rule visibility when switching tabs
+    setPassTouched(false);
+  };
+
+  // ✅ rules UI (shown only after typing in register)
+  const rules = passRules(pass);
+
+  const PasswordRulesUI =
+    mode !== "register" || !passTouched ? null : (
+      <View style={styles.rulesBox}>
+        <Text style={styles.rulesTitle}>Password must include:</Text>
+
+        <View style={styles.ruleRow}>
+          <Text style={[styles.ruleDot, rules.min8 ? styles.ruleOk : styles.ruleBad]}>•</Text>
+          <Text style={[styles.ruleText, rules.min8 ? styles.ruleOkTxt : styles.ruleBadTxt]}>
+            At least 8 characters
+          </Text>
+        </View>
+
+        <View style={styles.ruleRow}>
+          <Text style={[styles.ruleDot, rules.upper ? styles.ruleOk : styles.ruleBad]}>•</Text>
+          <Text style={[styles.ruleText, rules.upper ? styles.ruleOkTxt : styles.ruleBadTxt]}>
+            At least 1 uppercase letter (A–Z)
+          </Text>
+        </View>
+
+        <View style={styles.ruleRow}>
+          <Text style={[styles.ruleDot, rules.lower ? styles.ruleOk : styles.ruleBad]}>•</Text>
+          <Text style={[styles.ruleText, rules.lower ? styles.ruleOkTxt : styles.ruleBadTxt]}>
+            At least 1 lowercase letter (a–z)
+          </Text>
+        </View>
+
+        <View style={styles.ruleRow}>
+          <Text style={[styles.ruleDot, rules.special ? styles.ruleOk : styles.ruleBad]}>•</Text>
+          <Text style={[styles.ruleText, rules.special ? styles.ruleOkTxt : styles.ruleBadTxt]}>
+            At least 1 special character (!@#…)
+          </Text>
+        </View>
+      </View>
+    );
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
+        style={styles.safe}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ImageBackground source={AUTH_BG} style={styles.page} imageStyle={styles.pageBgImage}>
+          <View style={styles.pageOverlay}>
+          <AuthHeader />
+
+          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+            <View style={[styles.stage, { width: stageW }]}>
+              <View style={[styles.hero, compact && styles.heroCompact]}>
+                <Text style={[styles.heroTitle, compact && styles.heroTitleCompact]}>All Pro-Tec Car Care</Text>
+                <Text style={[styles.heroSub, compact && styles.heroSubCompact]}>
+                  Quality is our top priority, and customer{"\n"}satisfaction is our ultimate goal.
+                </Text>
+              </View>
+
+              <View style={[styles.cardWrap, compact && styles.cardWrapCompact]}>
+                <View style={[styles.tabs, compact && styles.tabsCompact]}>
+                  <TabBtn active={mode === "login"} label="Sign In" onPress={() => switchMode("login")} />
+                  <TabBtn active={mode === "register"} label="Sign Up" onPress={() => switchMode("register")} />
+                </View>
+
+                <View style={[styles.cardBody, compact && styles.cardBodyCompact]}>
+                  {mode === "login" ? (
+                    <>
+                      <Text style={styles.formTitle}>Welcome back</Text>
+                      <Text style={styles.formSub}>
+                        Sign in to your account to manage your car service appointments
+                      </Text>
+
+                      <Text style={styles.sectionLabel}>Account Details</Text>
+
+                      <Field
+                        label="Email"
+                        value={email}
+                        onChangeText={onEmailChange}
+                        placeholder="Enter your email"
+                        keyboardType="email-address"
+                        error={errors.email}
+                      />
+
+                      <PasswordField
+                        label="Password"
+                        value={pass}
+                        onChangeText={onPassChange}
+                        placeholder="Enter your password"
+                        show={showPass}
+                        onToggle={() => setShowPass((s) => !s)}
+                        error={errors.pass}
+                      />
+
+                      <View style={[styles.inlineActionRow, compact && styles.inlineActionRowCompact]}>
+                        <Text style={[styles.helperText, compact && styles.helperTextCompact]}>Use your registered email and password to continue.</Text>
+                        <TouchableOpacity activeOpacity={0.85} onPress={openForgot} style={styles.linkBtnInline}>
+                          <Text style={styles.linkTxt}>Forgot Password?</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <TouchableOpacity activeOpacity={0.85} onPress={onLogin} style={styles.primaryBtn}>
+                        <Text style={styles.primaryBtnText}>Sign In</Text>
+                      </TouchableOpacity>
+
+                      <View style={styles.switchRow}>
+                        <Text style={styles.switchText}>Need an account?</Text>
+                        <TouchableOpacity activeOpacity={0.85} onPress={() => switchMode("register")}>
+                          <Text style={styles.switchLink}>Create one here</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.formTitle}>Create Account</Text>
+                      <Text style={styles.formSub}>
+                        Sign up to start booking your car service appointment
+                      </Text>
+
+                      <Text style={styles.sectionLabel}>Personal Information</Text>
+
+                      <View style={[styles.row2, compact && styles.row2Compact]}>
+                        <View style={styles.col}>
+                          <Field
+                            label="First Name"
+                            value={first}
+                            onChangeText={(v) => {
+                              const value = v.replace(/[^a-zA-Z\s]/g, "").slice(0, 55);
+                              setFirst(value);
+                              setErrKey("first", validateName("First name", value));
+                            }}
+                            placeholder="Enter your first name"
+                            error={errors.first}
+                          />
+                        </View>
+
+                        <View style={styles.col}>
+                          <Field
+                            label="Last Name"
+                            value={last}
+                            onChangeText={(v) => {
+                              const value = v.replace(/[^a-zA-Z\s]/g, "").slice(0, 55);
+                              setLast(value);
+                              setErrKey("last", validateName("Last name", value));
+                            }}
+                            placeholder="Enter your last name"
+                            error={errors.last}
+                          />
+                        </View>
+                      </View>
+
+                      <View style={styles.sectionDivider} />
+
+                      <Text style={styles.sectionLabel}>Contact and Security</Text>
+
+                      <Field
+                        label="Email"
+                        value={email}
+                        onChangeText={onEmailChange}
+                        placeholder="Enter your email"
+                        keyboardType="email-address"
+                        error={errors.email}
+                      />
+
+                      <Field
+                        label="Phone"
+                        value={phone}
+                        onChangeText={onPhoneChange}
+                        placeholder="09xx xxx xxxx"
+                        keyboardType="phone-pad"
+                        error={errors.phone}
+                      />
+
+                      <PasswordField
+                        label="Password"
+                        value={pass}
+                        onChangeText={onPassChange}
+                        placeholder="Enter your password"
+                        show={showPass}
+                        onToggle={() => setShowPass((s) => !s)}
+                        error={errors.pass}
+                        below={PasswordRulesUI}
+                      />
+
+                      <PasswordField
+                        label="Confirm Password"
+                        value={confirm}
+                        onChangeText={onConfirmChange}
+                        placeholder="Confirm your password"
+                        show={showConfirm}
+                        onToggle={() => setShowConfirm((s) => !s)}
+                        error={errors.confirm}
+                      />
+
+                      <Text style={styles.helperText}>
+                        Your password should be memorable for you and hard to guess for anyone else.
+                      </Text>
+
+                      <TouchableOpacity activeOpacity={0.85} onPress={onCreateAccount} style={styles.primaryBtn}>
+                        <Text style={styles.primaryBtnText}>Create Account</Text>
+                      </TouchableOpacity>
+
+                      <View style={styles.switchRow}>
+                        <Text style={styles.switchText}>Already registered?</Text>
+                        <TouchableOpacity activeOpacity={0.85} onPress={() => switchMode("login")}>
+                          <Text style={styles.switchLink}>Sign in instead</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  )}
+                </View>
+              </View>
+
+              <TouchableOpacity activeOpacity={0.85} onPress={() => console.log("CONTACT US")} style={styles.helpBtn}>
+                <Text style={styles.helpTxt}>Need help? Contact Us</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+
+          <AuthFooter />
+
+          {/* =======================
+              SIGN UP OTP MODALS
+          ======================= */}
+          <Modal visible={otpStep === "email"} transparent animationType="fade">
+            <Pressable style={styles.modalOverlay} onPress={closeOtp} />
+            <View style={styles.modalCenter}>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>Verify Email</Text>
+                <Text style={styles.modalSub}>We will send a security code to verify your email.</Text>
+
+                <View style={styles.field}>
+                  <Text style={styles.label}>Email</Text>
+                  <TextInput value={otpEmail} editable={false} style={[styles.input, styles.inputDisabled]} />
+                </View>
+
+                <View style={styles.modalBtnRow}>
+                  <TouchableOpacity activeOpacity={0.85} onPress={closeOtp} style={[styles.modalBtn, styles.modalBtnGhost]}>
+                    <Text style={styles.modalBtnGhostTxt}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity activeOpacity={0.85} onPress={onSendOtp} style={styles.modalBtn}>
+                    <Text style={styles.modalBtnTxt}>Send OTP</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+
+          <Modal visible={otpStep === "code"} transparent animationType="fade">
+            <Pressable style={styles.modalOverlay} onPress={closeOtp} />
+            <View style={styles.modalCenter}>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>Enter Security Code</Text>
+                <Text style={styles.modalSub}>
+                  Please check {otpDestination || otpEmail || "your email"} for a message with your code.
+                </Text>
+
+                <Field
+                  label="Code"
+                  value={otpInput}
+                  onChangeText={(v) => setOtpInput(v.replace(/[^\d]/g, "").slice(0, 6))}
+                  placeholder="Enter code"
+                  keyboardType="number-pad"
+                  error={errors.otp}
+                />
+
+                <View style={styles.modalBtnRow}>
+                  <TouchableOpacity activeOpacity={0.85} onPress={closeOtp} style={[styles.modalBtn, styles.modalBtnGhost]}>
+                    <Text style={styles.modalBtnGhostTxt}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity activeOpacity={0.85} onPress={onVerifyOtp} style={styles.modalBtn}>
+                    <Text style={styles.modalBtnTxt}>Continue</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity activeOpacity={0.85} onPress={onSendOtp} style={styles.resendBtn}>
+                  <Text style={styles.resendTxt}>Resend code</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+
+          {/* =======================
+              FORGOT PASSWORD MODALS
+          ======================= */}
+          <Modal visible={fpStep === "email"} transparent animationType="fade">
+            <Pressable style={styles.modalOverlay} onPress={closeForgot} />
+            <View style={styles.modalCenter}>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>Verify Email</Text>
+                <Text style={styles.modalSub}>
+                  We will send a security code to verify{"\n"}your email.
+                </Text>
+
+                <Field
+                  label=""
+                  value={fpEmail}
+                  onChangeText={onFpEmailChange}
+                  placeholder="Enter your email"
+                  keyboardType="email-address"
+                  error={errors.fpEmail}
+                />
+
+                <View style={styles.modalBtnRow}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={closeForgot}
+                    style={[styles.modalBtn, styles.modalBtnGhost]}
+                  >
+                    <Text style={styles.modalBtnGhostTxt}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={onFpSendOtp}
+                    style={styles.modalBtn}
+                  >
+                    <Text style={styles.modalBtnTxt}>Send OTP</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+
+          <Modal visible={fpStep === "code"} transparent animationType="fade">
+            <Pressable style={styles.modalOverlay} onPress={closeForgot} />
+            <View style={styles.modalCenter}>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>Enter Security Code</Text>
+                <Text style={styles.modalSub}>
+                  Please check your email for a message with{"\n"}your code.
+                </Text>
+
+                <Field
+                  label=""
+                  value={fpInput}
+                  onChangeText={(v) => setFpInput(v.replace(/[^\d]/g, "").slice(0, 6))}
+                  placeholder="Enter code"
+                  keyboardType="number-pad"
+                  error={errors.fpCode}
+                />
+
+                <View style={styles.modalBtnRow}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={closeForgot}
+                    style={[styles.modalBtn, styles.modalBtnGhost]}
+                  >
+                    <Text style={styles.modalBtnGhostTxt}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={onFpVerifyOtp}
+                    style={styles.modalBtn}
+                  >
+                    <Text style={styles.modalBtnTxt}>Continue</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={onFpSendOtp}
+                  style={styles.resendBtn}
+                >
+                  <Text style={styles.resendTxt}>Resend code</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+          </View>
+        </ImageBackground>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
