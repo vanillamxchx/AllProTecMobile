@@ -388,6 +388,7 @@ export default function LoginRegister({ onLoginSuccess }) {
       email: clean(email),
       phone: clean(phone),
       password: String(pass || ""),
+      confirmPassword: String(confirm || ""),
       channel: "email",
     })
       .then((payload) => {

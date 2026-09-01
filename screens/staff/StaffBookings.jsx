@@ -17,6 +17,23 @@ import MobileFilterModal from "../../components/common/MobileFilterModal.jsx";
 const ICON_SEARCH = require("../../styles/icons/search.png");
 const ICON_FILTER = require("../../styles/icons/filter.png");
 
+function getBookingSortTime(booking = {}) {
+  const candidates = [
+    booking.updatedAt,
+    booking.createdAt,
+    booking.date,
+    booking.bookingDate,
+    booking.scheduledAt,
+  ];
+
+  for (const value of candidates) {
+    const time = new Date(value).getTime();
+    if (!Number.isNaN(time)) return time;
+  }
+
+  return 0;
+}
+
 function formatDate(dateStr) {
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return String(dateStr || "");
@@ -28,7 +45,7 @@ function formatDate(dateStr) {
 }
 
 export default function StaffBookings() {
-  const { scopedBookings } = useMobileData();
+  const { bookings } = useMobileData();
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
@@ -37,23 +54,23 @@ export default function StaffBookings() {
   const [filters, setFilters] = useState({ service: "All", status: "All" });
 
   const serviceOptions = useMemo(
-    () => Array.from(new Set(scopedBookings.map((booking) => String(booking.service || "").trim()).filter(Boolean))),
-    [scopedBookings]
+    () => Array.from(new Set(bookings.map((booking) => String(booking.service || "").trim()).filter(Boolean))),
+    [bookings]
   );
   const statusOptions = useMemo(
-    () => Array.from(new Set(scopedBookings.map((booking) => String(booking.status || "").trim()).filter(Boolean))),
-    [scopedBookings]
+    () => Array.from(new Set(bookings.map((booking) => String(booking.status || "").trim()).filter(Boolean))),
+    [bookings]
   );
 
   const filtered = useMemo(() => {
     const q = String(query || "").trim().toLowerCase();
-    return scopedBookings.filter((booking) => {
+    return bookings.filter((booking) => {
       const matchesQuery = !q || `${booking.id} ${booking.customer} ${booking.date}`.toLowerCase().includes(q);
       const matchesService = filters.service === "All" || String(booking.service || "").trim() === filters.service;
       const matchesStatus = filters.status === "All" || String(booking.status || "").trim() === filters.status;
       return matchesQuery && matchesService && matchesStatus;
-    });
-  }, [scopedBookings, query, filters]);
+    }).sort((left, right) => getBookingSortTime(right) - getBookingSortTime(left));
+  }, [bookings, query, filters]);
 
   const pageSize = 4;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));

@@ -18,8 +18,25 @@ import { getTrackingStatusMeta } from "../../services/trackingStatus";
 const ICON_SEARCH = require("../../styles/icons/search.png");
 const ICON_FILTER = require("../../styles/icons/filter.png");
 
+function getBookingSortTime(booking = {}) {
+  const candidates = [
+    booking.updatedAt,
+    booking.createdAt,
+    booking.date,
+    booking.bookingDate,
+    booking.scheduledAt,
+  ];
+
+  for (const value of candidates) {
+    const time = new Date(value).getTime();
+    if (!Number.isNaN(time)) return time;
+  }
+
+  return 0;
+}
+
 export default function StaffTracking() {
-  const { scopedBookings } = useMobileData();
+  const { bookings } = useMobileData();
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
@@ -28,24 +45,24 @@ export default function StaffTracking() {
   const [filters, setFilters] = useState({ status: "All", service: "All" });
 
   const statusOptions = useMemo(
-    () => Array.from(new Set(scopedBookings.map((booking) => String(booking.status || "").trim()).filter(Boolean))),
-    [scopedBookings]
+    () => Array.from(new Set(bookings.map((booking) => String(booking.status || "").trim()).filter(Boolean))),
+    [bookings]
   );
   const serviceOptions = useMemo(
-    () => Array.from(new Set(scopedBookings.map((booking) => String(booking.service || "").trim()).filter(Boolean))),
-    [scopedBookings]
+    () => Array.from(new Set(bookings.map((booking) => String(booking.service || "").trim()).filter(Boolean))),
+    [bookings]
   );
 
   const filtered = useMemo(() => {
     const q = String(query || "").trim().toLowerCase();
-    return scopedBookings.filter((booking) => {
+    return bookings.filter((booking) => {
       const matchesQuery =
         !q || `${booking.id} ${booking.customer} ${booking.status} ${booking.service}`.toLowerCase().includes(q);
       const matchesStatus = filters.status === "All" || String(booking.status || "").trim() === filters.status;
       const matchesService = filters.service === "All" || String(booking.service || "").trim() === filters.service;
       return matchesQuery && matchesStatus && matchesService;
-    });
-  }, [scopedBookings, query, filters]);
+    }).sort((left, right) => getBookingSortTime(right) - getBookingSortTime(left));
+  }, [bookings, query, filters]);
 
   const pageSize = 4;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));

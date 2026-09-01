@@ -116,9 +116,11 @@ export default function AdminProfile({ session }) {
 
   const [pass, setPass] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
+  const [specialPassword, setSpecialPassword] = useState("");
 
   const [showPass, setShowPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
+  const [showSpecialPassword, setShowSpecialPassword] = useState(false);
   const [otpRequestVisible, setOtpRequestVisible] = useState(false);
   const [otpModalVisible, setOtpModalVisible] = useState(false);
   const [otpCode, setOtpCode] = useState("");
@@ -155,6 +157,7 @@ export default function AdminProfile({ session }) {
     phone: false,
     pass: false,
     confirmPass: false,
+    specialPassword: false,
   });
 
   const initialLetter = useMemo(() => {
@@ -201,6 +204,7 @@ export default function AdminProfile({ session }) {
     const ph = clean(phone);
     const pw = String(pass || "");
     const cpw = String(confirmPass || "");
+    const spw = String(specialPassword || "").trim();
 
     if (touched.first && f && f.length < 2)
       e.first = "First name must be at least 2 characters.";
@@ -227,8 +231,11 @@ export default function AdminProfile({ session }) {
         e.confirmPass = "Passwords do not match.";
     }
 
+    if (touched.specialPassword && !spw)
+      e.specialPassword = "Special password is required for admin profile changes.";
+
     return e;
-  }, [isEditing, first, last, email, phone, pass, confirmPass, touched]);
+  }, [isEditing, first, last, email, phone, pass, confirmPass, specialPassword, touched]);
 
   const onCancel = () => {
     setFirst(snapshot.first);
@@ -238,8 +245,10 @@ export default function AdminProfile({ session }) {
 
     setPass("");
     setConfirmPass("");
+    setSpecialPassword("");
     setShowPass(false);
     setShowConfirmPass(false);
+    setShowSpecialPassword(false);
 
     setTouched({
       first: false,
@@ -248,6 +257,7 @@ export default function AdminProfile({ session }) {
       phone: false,
       pass: false,
       confirmPass: false,
+      specialPassword: false,
     });
 
     setIsEditing(false);
@@ -279,8 +289,10 @@ export default function AdminProfile({ session }) {
         setIsEditing(false);
         setPass("");
         setConfirmPass("");
+        setSpecialPassword("");
         setShowPass(false);
         setShowConfirmPass(false);
+        setShowSpecialPassword(false);
         setTouched({
           first: false,
           last: false,
@@ -288,6 +300,7 @@ export default function AdminProfile({ session }) {
           phone: false,
           pass: false,
           confirmPass: false,
+          specialPassword: false,
         });
         closeOtpModal();
       })
@@ -357,12 +370,25 @@ export default function AdminProfile({ session }) {
         })
       )
       .then(() => {
-        Alert.alert("Password updated", "Password updated successfully.");
+        const { password: _password, confirmPassword: _confirmPassword, ...profilePayload } = pendingPayload || {};
+        const hasPendingProfileChanges =
+          clean(profilePayload.first) !== clean(snapshot.first) ||
+          clean(profilePayload.last) !== clean(snapshot.last) ||
+          clean(profilePayload.email) !== clean(snapshot.email) ||
+          clean(profilePayload.phone) !== clean(snapshot.phone);
+
+        if (!hasPendingProfileChanges) return null;
+        return updateProfile(profilePayload);
+      })
+      .then(() => {
+        Alert.alert("Saved", "Profile and password updated successfully.");
         setIsEditing(false);
         setPass("");
         setConfirmPass("");
+        setSpecialPassword("");
         setShowPass(false);
         setShowConfirmPass(false);
+        setShowSpecialPassword(false);
         setTouched({
           first: false,
           last: false,
@@ -370,6 +396,7 @@ export default function AdminProfile({ session }) {
           phone: false,
           pass: false,
           confirmPass: false,
+          specialPassword: false,
         });
         closeOtpModal();
       })
@@ -403,7 +430,13 @@ export default function AdminProfile({ session }) {
       email: clean(email),
       phone: clean(phone),
       password: clean(pass),
+      specialPassword: clean(specialPassword),
     };
+    const hasProfileChanges =
+      payload.first !== clean(snapshot.first) ||
+      payload.last !== clean(snapshot.last) ||
+      payload.email !== clean(snapshot.email) ||
+      payload.phone !== clean(snapshot.phone);
 
     if (!payload.first || payload.first.length < 2)
       return Alert.alert("Invalid name", "First name must be at least 2 characters.");
@@ -422,6 +455,11 @@ export default function AdminProfile({ session }) {
         return Alert.alert("Confirm Password", "Please confirm your password.");
       if (payload.password !== clean(confirmPass))
         return Alert.alert("Mismatch", "Passwords do not match.");
+    }
+
+    if (hasProfileChanges && !payload.specialPassword) {
+      setTouched((current) => ({ ...current, specialPassword: true }));
+      return Alert.alert("Special password required", "Please enter the special password to save admin profile changes.");
     }
 
     if (payload.password) {
@@ -531,6 +569,22 @@ export default function AdminProfile({ session }) {
             onToggle={() => setShowConfirmPass((s) => !s)}
             editable={isEditing}
             error={errors.confirmPass}
+          />
+        )}
+
+        {isEditing && (
+          <PasswordField
+            label="Special Password"
+            value={specialPassword}
+            onChangeText={(v) => {
+              setSpecialPassword(v);
+              setTouched((t) => ({ ...t, specialPassword: true }));
+            }}
+            placeholder="Required for admin profile changes"
+            show={showSpecialPassword}
+            onToggle={() => setShowSpecialPassword((s) => !s)}
+            editable={isEditing}
+            error={errors.specialPassword}
           />
         )}
 

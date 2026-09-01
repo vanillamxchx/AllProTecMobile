@@ -415,6 +415,80 @@ function matchUserScopedRecord(record, currentUser) {
   );
 }
 
+function splitIdentityValues(value) {
+  if (Array.isArray(value)) return value.flatMap(splitIdentityValues);
+  if (value && typeof value === "object") {
+    return [
+      value.id,
+      value._id,
+      value.userId,
+      value.staffId,
+      value.name,
+      value.email,
+      value.first && value.last ? `${value.first} ${value.last}` : "",
+      value.firstName && value.lastName ? `${value.firstName} ${value.lastName}` : "",
+    ].flatMap(splitIdentityValues);
+  }
+
+  return String(value || "")
+    .split(/[;,|]/)
+    .map(normalizeName)
+    .filter(Boolean);
+}
+
+function getStaffIdentityKeys(user = {}) {
+  return [
+    user.id,
+    user._id,
+    user.userId,
+    user.staffId,
+    user.name,
+    user.email,
+    user.first && user.last ? `${user.first} ${user.last}` : "",
+    user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : "",
+  ]
+    .flatMap(splitIdentityValues)
+    .filter(Boolean);
+}
+
+function getBookingAssigneeKeys(booking = {}) {
+  return [
+    booking.assigned,
+    booking.assignedTo,
+    booking.assignedStaff,
+    booking.assignedStaffId,
+    booking.assignedDetailer,
+    booking.assignedDetailerId,
+    booking.detailer,
+    booking.detailerId,
+    booking.staff,
+    booking.staffId,
+    booking.staffName,
+    booking.worker,
+    booking.workerId,
+  ]
+    .flatMap(splitIdentityValues)
+    .filter(Boolean);
+}
+
+function identityMatchesAssignee(identity, assignee) {
+  return (
+    identity === assignee ||
+    (identity.length >= 4 && assignee.includes(identity)) ||
+    (assignee.length >= 4 && identity.includes(assignee))
+  );
+}
+
+function isBookingAssignedToStaff(booking, staffUser) {
+  const assigneeKeys = getBookingAssigneeKeys(booking);
+  if (!assigneeKeys.length) return true;
+
+  const staffKeys = getStaffIdentityKeys(staffUser);
+  return assigneeKeys.some((assignee) =>
+    staffKeys.some((identity) => identityMatchesAssignee(identity, assignee))
+  );
+}
+
 function requestFinancialInterpretation(payload) {
   return apiRequest("/api/admin/financials/interpretation", {
     method: "POST",
@@ -584,12 +658,7 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
   const scopedBookings = useMemo(() => {
     if (role === "admin") return data.bookings;
     if (role === "staff") {
-      const currentName = normalizeName(currentUser?.name);
-      const currentEmail = normalizeName(currentUser?.email);
-      return data.bookings.filter((booking) => {
-        const assigned = normalizeName(booking.assigned);
-        return !assigned || assigned === currentName || assigned === currentEmail;
-      });
+      return data.bookings.filter((booking) => isBookingAssignedToStaff(booking, currentUser));
     }
     return data.bookings.filter((booking) => matchUserScopedRecord(booking, currentUser));
   }, [data.bookings, role, currentUser]);
@@ -867,9 +936,12 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
 
       const accountRole = normalizeRole(
         currentUser.userType || session?.userType,
-        currentUser.role || session?.role
+        currentUser.role || session?.role || currentUser.subRole || session?.subRole
       );
-      const accountType = accountRole === "admin" ? "Admin" : accountRole === "staff" ? "Staff" : "Client";
+      const rolePayload =
+        accountRole === "admin"
+          ? { userType: "Admin", role: "Admin" }
+          : {};
       const {
         password: _currentPassword,
         confirmPassword: _currentConfirmPassword,
@@ -877,16 +949,24 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
         passwordSalt: _currentPasswordSalt,
         passwordOtpVerificationId: _currentPasswordOtpVerificationId,
         passwordOtpCode: _currentPasswordOtpCode,
+        role: _currentRole,
+        userType: _currentUserType,
+        subRole: _currentSubRole,
         ...safeCurrentUser
       } = currentUser || {};
+      const {
+        role: _payloadRole,
+        userType: _payloadUserType,
+        subRole: _payloadSubRole,
+        ...safeProfilePayload
+      } = profilePayload;
 
       const updatedUser = await mutate(`/api/admin/users/${currentUser.id}`, {
         method: "PUT",
         body: JSON.stringify({
           ...safeCurrentUser,
-          ...profilePayload,
-          userType: accountType,
-          role: accountType,
+          ...safeProfilePayload,
+          ...rolePayload,
           auditUser,
         }),
       });

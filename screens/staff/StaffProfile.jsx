@@ -346,7 +346,11 @@ export default function StaffProfile({ session }) {
         })
       )
       .then(() => {
-        Alert.alert("Password updated", "Password updated successfully.");
+        const { password: _password, confirmPassword: _confirmPassword, ...profilePayload } = pendingPayload || {};
+        return updateProfile(profilePayload);
+      })
+      .then(() => {
+        Alert.alert("Saved", "Profile and password updated successfully.");
         setIsEditing(false);
         setPass("");
         setConfirmPass("");
