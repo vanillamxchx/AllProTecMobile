@@ -105,8 +105,9 @@ export default function ClientPayments() {
     const q = String(query || "").trim().toLowerCase();
     return scopedPayments.filter((payment) => {
       const stageLabel = getPaymentStageLabel(payment);
+      const vehicleStr = `${payment.vehicle || ""} ${payment.vehicleType || ""} ${payment.vehicleModel || ""} ${payment.car || ""} ${payment.plateNumber || ""} ${payment.plate || ""}`.trim();
       const matchesQuery =
-        !q || `${payment.id} ${payment.bookingId} ${payment.service} ${payment.status} ${stageLabel} ${payment.method || ""} ${payment.downPaymentMethod || ""} ${payment.finalPaymentMethod || ""}`.toLowerCase().includes(q);
+        !q || `${payment.id} ${payment.bookingId} ${payment.service} ${vehicleStr} ${payment.status} ${stageLabel} ${payment.method || ""} ${payment.downPaymentMethod || ""} ${payment.finalPaymentMethod || ""}`.toLowerCase().includes(q);
       const matchesStatus = filters.status === "All" || stageLabel === filters.status || String(payment.status || "").trim() === filters.status;
       const matchesMethod =
         filters.method === "All" ||
@@ -162,6 +163,14 @@ export default function ClientPayments() {
             </TouchableOpacity>
           </View>
 
+          {Boolean(query.trim()) && filtered.length === 0 && (
+            <View style={{ marginTop: -4, marginBottom: 8, paddingHorizontal: 4 }}>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#DC2626" }}>
+                No payments match "{query.trim()}". Please try a different keyword or check payment details.
+              </Text>
+            </View>
+          )}
+
           <View style={styles.tableCard}>
             <View style={styles.tHead}>
               <Text style={[styles.th, styles.thId]}>Booking ID</Text>
@@ -172,7 +181,11 @@ export default function ClientPayments() {
 
             {pageRows.length === 0 ? (
               <View style={styles.emptyRow}>
-                <Text style={styles.emptyTxt}>No records found.</Text>
+                <Text style={styles.emptyTxt}>
+                  {query.trim()
+                    ? `No payments match "${query.trim()}". Try searching by booking ID, service, or status.`
+                    : "No records found."}
+                </Text>
               </View>
             ) : (
               pageRows.map((payment) => {
@@ -196,19 +209,21 @@ export default function ClientPayments() {
             )}
           </View>
 
-          <View style={styles.pagerRow}>
-            <TouchableOpacity activeOpacity={0.85} style={styles.pagerBtn} onPress={() => setPage((p) => Math.max(1, p - 1))}>
-              <Text style={styles.pagerTxt}>{"<"}</Text>
-            </TouchableOpacity>
+          {filtered.length > pageSize && (
+            <View style={styles.pagerRow}>
+              <TouchableOpacity activeOpacity={0.85} style={styles.pagerBtn} onPress={() => setPage((p) => Math.max(1, p - 1))}>
+                <Text style={styles.pagerTxt}>{"<"}</Text>
+              </TouchableOpacity>
 
-            <View style={styles.pagePill}>
-              <Text style={styles.pageTxt}>{safePage}</Text>
+              <View style={styles.pagePill}>
+                <Text style={styles.pageTxt}>{safePage}</Text>
+              </View>
+
+              <TouchableOpacity activeOpacity={0.85} style={styles.pagerBtn} onPress={() => setPage((p) => Math.min(totalPages, p + 1))}>
+                <Text style={styles.pagerTxt}>{">"}</Text>
+              </TouchableOpacity>
             </View>
-
-            <TouchableOpacity activeOpacity={0.85} style={styles.pagerBtn} onPress={() => setPage((p) => Math.min(totalPages, p + 1))}>
-              <Text style={styles.pagerTxt}>{">"}</Text>
-            </TouchableOpacity>
-          </View>
+          )}
 
           <View style={{ height: 12 }} />
         </ScrollView>

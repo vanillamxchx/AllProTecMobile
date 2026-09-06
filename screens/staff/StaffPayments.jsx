@@ -95,9 +95,10 @@ export default function StaffPayments({ onBack }) {
           .filter(Boolean)
           .map((m) => String(m).trim().toLowerCase());
 
+        const vehicleStr = `${payment.vehicle || ""} ${payment.vehicleType || ""} ${payment.vehicleModel || ""} ${payment.car || ""} ${payment.plateNumber || ""} ${payment.plate || ""}`.trim();
         const matchesQuery =
           !q ||
-          `${payment.bookingId || ""} ${payment.id || ""} ${payment.customer || ""} ${stage} ${rawStatus} ${payment.service || ""} ${methods.join(" ")}`
+          `${payment.bookingId || ""} ${payment.id || ""} ${payment.customer || ""} ${stage} ${rawStatus} ${payment.service || ""} ${vehicleStr} ${methods.join(" ")}`
             .toLowerCase()
             .includes(q);
 
@@ -191,11 +192,23 @@ export default function StaffPayments({ onBack }) {
             </TouchableOpacity>
           </View>
 
+          {Boolean(query.trim()) && filtered.length === 0 && (
+            <View style={{ marginTop: -4, marginBottom: 8, paddingHorizontal: 4 }}>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#DC2626" }}>
+                No payments match "{query.trim()}". Please try a different keyword or check payment details.
+              </Text>
+            </View>
+          )}
+
           {filtered.length === 0 ? (
             <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>No payments found</Text>
+              <Text style={styles.emptyTitle}>
+                {query.trim() ? "No matching payments found" : "No payments found"}
+              </Text>
               <Text style={styles.emptySub}>
-                {query || filters.status !== "All" || filters.method !== "All"
+                {query.trim()
+                  ? `No payments match "${query.trim()}". Try searching by customer, booking ID, or payment method.`
+                  : filters.status !== "All" || filters.method !== "All"
                   ? "Try adjusting your search or filters."
                   : "Payment records will appear here."}
               </Text>

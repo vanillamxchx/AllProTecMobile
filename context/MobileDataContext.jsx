@@ -1654,6 +1654,78 @@ export async function loginWithApi(email, password) {
   });
 }
 
+export async function checkEmailRegistered(email) {
+  const cleanEmail = String(email || "").trim().toLowerCase();
+  if (!cleanEmail) {
+    return { checked: false, isRegistered: false };
+  }
+
+  const candidateEndpoints = [
+    { path: "/api/auth/check-email", method: "POST", body: { email: cleanEmail } },
+    { path: `/api/auth/check-email?email=${encodeURIComponent(cleanEmail)}`, method: "GET" },
+    { path: "/api/auth/signup/check-email", method: "POST", body: { email: cleanEmail } },
+    { path: `/api/users/check-email?email=${encodeURIComponent(cleanEmail)}`, method: "GET" },
+    { path: `/api/auth/check?email=${encodeURIComponent(cleanEmail)}`, method: "GET" },
+  ];
+
+  for (const ep of candidateEndpoints) {
+    try {
+      const options = { method: ep.method };
+      if (ep.body) {
+        options.body = JSON.stringify(ep.body);
+      }
+      const data = await apiRequest(ep.path, options);
+      if (data && typeof data === "object") {
+        if (
+          data.exists === true ||
+          data.isRegistered === true ||
+          data.registered === true ||
+          data.available === false ||
+          data.isAvailable === false
+        ) {
+          return {
+            checked: true,
+            isRegistered: true,
+            message: data.message || "This email is already registered. Please sign in instead.",
+          };
+        }
+        if (
+          data.exists === false ||
+          data.isRegistered === false ||
+          data.registered === false ||
+          data.available === true ||
+          data.isAvailable === true
+        ) {
+          return { checked: true, isRegistered: false };
+        }
+      }
+    } catch (err) {
+      const msg = String(err?.message || "").toLowerCase();
+      const status = err?.statusCode;
+      if (status === 409 || status === 400) {
+        if (
+          msg.includes("already") ||
+          msg.includes("exist") ||
+          msg.includes("registered") ||
+          msg.includes("taken") ||
+          msg.includes("in use")
+        ) {
+          return {
+            checked: true,
+            isRegistered: true,
+            message: err.message || "This email is already registered. Please sign in instead.",
+          };
+        }
+      }
+      if (status === 404 || msg.includes("not found")) {
+        continue;
+      }
+    }
+  }
+
+  return { checked: false, isRegistered: false };
+}
+
 export async function requestSignupOtp(payload) {
   return apiRequest("/api/auth/signup/request-otp", {
     method: "POST",

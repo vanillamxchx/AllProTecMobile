@@ -20,6 +20,7 @@ import AuthHeader from "../components/AuthHeader.jsx";
 import AuthFooter from "../components/AuthFooter.jsx";
 import styles from "../styles/css/loginRegisterStyles.js";
 import {
+  checkEmailRegistered,
   loginWithApi,
   requestPasswordOtp,
   resetPasswordWithOtp,
@@ -150,6 +151,43 @@ const passStrong = (v) => {
   return r.min8 && r.upper && r.lower && r.special;
 };
 
+function PasswordRulesBox({ rules }) {
+  if (!rules) return null;
+  return (
+    <View style={styles.rulesBox}>
+      <Text style={styles.rulesTitle}>Password must include:</Text>
+
+      <View style={styles.ruleRow}>
+        <Text style={[styles.ruleDot, rules.min8 ? styles.ruleOk : styles.ruleBad]}>•</Text>
+        <Text style={[styles.ruleText, rules.min8 ? styles.ruleOkTxt : styles.ruleBadTxt]}>
+          At least 8 characters
+        </Text>
+      </View>
+
+      <View style={styles.ruleRow}>
+        <Text style={[styles.ruleDot, rules.upper ? styles.ruleOk : styles.ruleBad]}>•</Text>
+        <Text style={[styles.ruleText, rules.upper ? styles.ruleOkTxt : styles.ruleBadTxt]}>
+          At least 1 uppercase letter (A–Z)
+        </Text>
+      </View>
+
+      <View style={styles.ruleRow}>
+        <Text style={[styles.ruleDot, rules.lower ? styles.ruleOk : styles.ruleBad]}>•</Text>
+        <Text style={[styles.ruleText, rules.lower ? styles.ruleOkTxt : styles.ruleBadTxt]}>
+          At least 1 lowercase letter (a–z)
+        </Text>
+      </View>
+
+      <View style={styles.ruleRow}>
+        <Text style={[styles.ruleDot, rules.special ? styles.ruleOk : styles.ruleBad]}>•</Text>
+        <Text style={[styles.ruleText, rules.special ? styles.ruleOkTxt : styles.ruleBadTxt]}>
+          At least 1 special character (!@#…)
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 const ALL_STAFF_ROLE_STRINGS = new Set([
   "staff",
   "mechanic",
@@ -181,6 +219,11 @@ const normalizePermission = (userType, role) => {
   if (ALL_STAFF_ROLE_STRINGS.has(normalizedRole)) return "staff";
   return "client";
 };
+
+const MAX_FP_ATTEMPTS = 3;
+const FP_LOCK_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+let moduleFpLockUntil = 0;
+let moduleFpAttempts = 0;
 
 /* =======================
    Screen
@@ -214,6 +257,7 @@ export default function LoginRegister({ onLoginSuccess }) {
   const [otpVerificationId, setOtpVerificationId] = useState("");
   const [otpDestination, setOtpDestination] = useState("");
   const [otpBusy, setOtpBusy] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
 
 
   // ✅ FORGOT PASSWORD flow: "" | "email" | "code"
@@ -227,6 +271,52 @@ export default function LoginRegister({ onLoginSuccess }) {
   const [fpBusy, setFpBusy] = useState(false);
   const [fpShowPassword, setFpShowPassword] = useState(false);
   const [fpShowConfirmPassword, setFpShowConfirmPassword] = useState(false);
+  const [fpPassTouched, setFpPassTouched] = useState(false);
+  const [fpAttempts, setFpAttempts] = useState(moduleFpAttempts);
+  const [fpLockUntil, setFpLockUntil] = useState(moduleFpLockUntil);
+  const [fpCooldownSeconds, setFpCooldownSeconds] = useState(() =>
+    Math.max(0, Math.ceil((moduleFpLockUntil - Date.now()) / 1000))
+  );
+
+  const formatFpTimer = (totalSeconds) => {
+    const mins = Math.floor(Math.max(0, totalSeconds) / 60);
+    const secs = Math.max(0, totalSeconds) % 60;
+    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+  };
+
+  const isFpLocked = fpCooldownSeconds > 0;
+  const fpCooldownText = isFpLocked
+    ? `Maximum attempts reached. Please wait ${formatFpTimer(fpCooldownSeconds)} before a new one can be requested.`
+    : "";
+
+  const triggerFpLock = (durationMs = FP_LOCK_DURATION_MS) => {
+    const until = Date.now() + durationMs;
+    moduleFpLockUntil = until;
+    setFpLockUntil(until);
+    const secs = Math.ceil(durationMs / 1000);
+    setFpCooldownSeconds(secs);
+  };
+
+  React.useEffect(() => {
+    if (!fpLockUntil) return;
+
+    const tick = () => {
+      const remainingMs = fpLockUntil - Date.now();
+      const remainingSecs = Math.max(0, Math.ceil(remainingMs / 1000));
+      setFpCooldownSeconds(remainingSecs);
+
+      if (remainingSecs <= 0) {
+        moduleFpLockUntil = 0;
+        moduleFpAttempts = 0;
+        setFpLockUntil(0);
+        setFpAttempts(0);
+      }
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [fpLockUntil]);
   const [apiSettingsOpen, setApiSettingsOpen] = useState(false);
   const [apiUrlInput, setApiUrlInput] = useState(getApiBaseUrl());
   const [apiTestBusy, setApiTestBusy] = useState(false);
@@ -386,16 +476,70 @@ export default function LoginRegister({ onLoginSuccess }) {
       });
   };
 
-  // Create Account -> start SIGN UP otp flow
-  const onCreateAccount = () => {
+  // Create Account -> validate email in database, then start SIGN UP otp flow
+  const onCreateAccount = async () => {
+    if (createBusy || otpBusy) return;
     resetErrors();
     if (!validateRegister()) return;
 
-    setOtpEmail(clean(email));
-    setOtpInput("");
-    setOtpVerificationId("");
-    setOtpDestination("");
-    setOtpStep("email");
+    const targetEmail = clean(email).toLowerCase();
+    setCreateBusy(true);
+
+    try {
+      // 1. Validate if the email is already registered using dedicated check endpoints
+      const checkResult = await checkEmailRegistered(targetEmail);
+      if (checkResult.checked && checkResult.isRegistered) {
+        setErrKey("email", checkResult.message || "This email is already registered. Please sign in instead.");
+        setCreateBusy(false);
+        return;
+      }
+
+      // 2. Request signup OTP which validates uniqueness in MongoDB on backend
+      const payload = await requestSignupOtp({
+        firstName: clean(first),
+        lastName: clean(last),
+        email: targetEmail,
+        phone: clean(phone),
+        password: String(pass || ""),
+        confirmPassword: String(confirm || ""),
+        channel: "email",
+      });
+
+      setOtpEmail(targetEmail);
+      setOtpVerificationId(payload?.verificationId || "");
+      setOtpDestination(payload?.destination || targetEmail);
+      setOtpInput("");
+      setOtpStep("code");
+      setErrKey("otp", "");
+    } catch (error) {
+      const message = String(error?.message || "");
+      const lower = message.toLowerCase();
+
+      if (
+        lower.includes("already registered") ||
+        lower.includes("already exist") ||
+        lower.includes("already in use") ||
+        lower.includes("already taken") ||
+        lower.includes("duplicate") ||
+        lower.includes("user exists") ||
+        lower.includes("account exists") ||
+        lower.includes("an account with this email") ||
+        lower.includes("email is registered") ||
+        lower.includes("email exists")
+      ) {
+        setErrKey("email", "This email is already registered. Please sign in instead.");
+      } else if (isApiReachabilityError(error)) {
+        setErrKey("email", "Could not reach the server. Please check your connection.");
+      } else if (lower.includes("phone")) {
+        setErrKey("phone", message);
+      } else if (lower.includes("password")) {
+        setErrKey("pass", message);
+      } else {
+        setErrKey("email", message || "Failed to validate account details.");
+      }
+    } finally {
+      setCreateBusy(false);
+    }
   };
 
   const onSendOtp = () => {
@@ -419,7 +563,22 @@ export default function LoginRegister({ onLoginSuccess }) {
         setErrKey("otp", "");
       })
       .catch((error) => {
-        setErrKey("otp", error.message || "Failed to send OTP.");
+        const message = String(error?.message || "");
+        const lower = message.toLowerCase();
+        if (
+          lower.includes("already registered") ||
+          lower.includes("already exist") ||
+          lower.includes("already in use") ||
+          lower.includes("already taken") ||
+          lower.includes("duplicate") ||
+          lower.includes("user exists") ||
+          lower.includes("account exists")
+        ) {
+          closeOtp();
+          setErrKey("email", "This email is already registered. Please sign in instead.");
+        } else {
+          setErrKey("otp", message || "Failed to send OTP.");
+        }
       })
       .finally(() => {
         setOtpBusy(false);
@@ -476,6 +635,7 @@ export default function LoginRegister({ onLoginSuccess }) {
     setFpConfirmPassword("");
     setFpShowPassword(false);
     setFpShowConfirmPassword(false);
+    setFpPassTouched(false);
     setFpBusy(false);
     setFpStep("email");
   };
@@ -489,10 +649,38 @@ export default function LoginRegister({ onLoginSuccess }) {
     setFpConfirmPassword("");
     setFpShowPassword(false);
     setFpShowConfirmPassword(false);
+    setFpPassTouched(false);
     setFpBusy(false);
     setErrKey("fpEmail", "");
     setErrKey("fpCode", "");
     setErrKey("fpPass", "");
+    setErrKey("fpConfirm", "");
+  };
+
+  const onFpPassChange = (v) => {
+    setFpPassword(v);
+
+    if (!fpPassTouched && String(v || "").length > 0) {
+      setFpPassTouched(true);
+    }
+
+    const t = clean(v);
+    if (!t) setErrKey("fpPass", "Password is required.");
+    else if (fpPassTouched && !passStrong(v)) setErrKey("fpPass", "Password is not strong enough.");
+    else setErrKey("fpPass", "");
+
+    if (clean(fpConfirmPassword)) {
+      if (clean(fpConfirmPassword) !== t) setErrKey("fpConfirm", "Passwords do not match.");
+      else setErrKey("fpConfirm", "");
+    }
+  };
+
+  const onFpConfirmPassChange = (v) => {
+    setFpConfirmPassword(v);
+    const t = clean(v);
+
+    if (!t) return setErrKey("fpConfirm", "Confirm password is required.");
+    if (clean(fpPassword) !== t) return setErrKey("fpConfirm", "Passwords do not match.");
     setErrKey("fpConfirm", "");
   };
 
@@ -504,11 +692,38 @@ export default function LoginRegister({ onLoginSuccess }) {
     setErrKey("fpEmail", "");
   };
 
+  const onFpCodeChange = (v) => {
+    const digits = String(v || "").replace(/[^\d]/g, "").slice(0, 6);
+    setFpInput(digits);
+
+    if (!digits) {
+      return setErrKey("fpCode", "OTP code is required.");
+    }
+    if (digits.length < 6) {
+      return setErrKey("fpCode", "OTP code must be 6 digits in length.");
+    }
+    setErrKey("fpCode", "");
+  };
+
   const onFpSendOtp = () => {
     if (fpBusy) return;
+
+    if (isFpLocked) {
+      setErrKey(fpStep === "code" ? "fpCode" : "fpEmail", fpCooldownText);
+      return;
+    }
+
     const t = clean(fpEmail);
     if (!t) return setErrKey("fpEmail", "Email is required.");
     if (!emailOk(t)) return setErrKey("fpEmail", "Enter a valid email address.");
+
+    const nextAttempts = fpAttempts + 1;
+    moduleFpAttempts = nextAttempts;
+    setFpAttempts(nextAttempts);
+
+    if (nextAttempts >= MAX_FP_ATTEMPTS) {
+      triggerFpLock();
+    }
 
     setFpBusy(true);
     requestPasswordOtp({
@@ -525,7 +740,19 @@ export default function LoginRegister({ onLoginSuccess }) {
         setFpStep("code");
       })
       .catch((error) => {
-        setErrKey("fpEmail", error.message || "Failed to send OTP.");
+        const message = String(error?.message || "");
+        const lower = message.toLowerCase();
+        if (
+          lower.includes("too many") ||
+          lower.includes("attempt") ||
+          lower.includes("limit") ||
+          lower.includes("wait") ||
+          error?.statusCode === 429
+        ) {
+          triggerFpLock();
+        } else {
+          setErrKey(fpStep === "code" ? "fpCode" : "fpEmail", message || "Failed to send OTP.");
+        }
       })
       .finally(() => {
         setFpBusy(false);
@@ -534,9 +761,16 @@ export default function LoginRegister({ onLoginSuccess }) {
 
   const onFpVerifyOtp = () => {
     if (fpBusy) return;
-    const entered = clean(fpInput);
 
+    if (isFpLocked) {
+      setErrKey("fpCode", fpCooldownText);
+      return;
+    }
+
+    const entered = clean(fpInput).replace(/[^\d]/g, "");
     if (!entered) return setErrKey("fpCode", "OTP code is required.");
+    if (entered.length < 6) return setErrKey("fpCode", "OTP code must be 6 digits in length.");
+
     setFpBusy(true);
     verifyPasswordOtp({
       email: clean(fpEmail),
@@ -548,10 +782,37 @@ export default function LoginRegister({ onLoginSuccess }) {
         setErrKey("fpCode", "");
         setFpPassword("");
         setFpConfirmPassword("");
+        setFpPassTouched(false);
         setFpStep("reset");
+        moduleFpAttempts = 0;
+        setFpAttempts(0);
       })
       .catch((error) => {
-        setErrKey("fpCode", error.message || "Invalid code. Try again.");
+        const message = String(error?.message || "");
+        const lower = message.toLowerCase();
+
+        if (
+          lower.includes("too many") ||
+          lower.includes("limit") ||
+          error?.statusCode === 429
+        ) {
+          triggerFpLock();
+          return;
+        }
+
+        const nextAttempts = fpAttempts + 1;
+        moduleFpAttempts = nextAttempts;
+        setFpAttempts(nextAttempts);
+
+        if (nextAttempts >= MAX_FP_ATTEMPTS) {
+          triggerFpLock();
+        } else {
+          const remaining = MAX_FP_ATTEMPTS - nextAttempts;
+          setErrKey(
+            "fpCode",
+            `${message || "Invalid code."} (${remaining} attempt${remaining > 1 ? "s" : ""} remaining)`
+          );
+        }
       })
       .finally(() => {
         setFpBusy(false);
@@ -564,6 +825,7 @@ export default function LoginRegister({ onLoginSuccess }) {
     const nextConfirmPassword = String(fpConfirmPassword || "");
 
     if (!clean(nextPassword)) return setErrKey("fpPass", "Password is required.");
+    setFpPassTouched(true);
     if (!passStrong(nextPassword)) return setErrKey("fpPass", "Password is not strong enough.");
     if (!clean(nextConfirmPassword)) return setErrKey("fpConfirm", "Confirm password is required.");
     if (nextPassword !== nextConfirmPassword) return setErrKey("fpConfirm", "Passwords do not match.");
@@ -659,37 +921,12 @@ export default function LoginRegister({ onLoginSuccess }) {
 
   const PasswordRulesUI =
     mode !== "register" || !passTouched ? null : (
-      <View style={styles.rulesBox}>
-        <Text style={styles.rulesTitle}>Password must include:</Text>
+      <PasswordRulesBox rules={rules} />
+    );
 
-        <View style={styles.ruleRow}>
-          <Text style={[styles.ruleDot, rules.min8 ? styles.ruleOk : styles.ruleBad]}>•</Text>
-          <Text style={[styles.ruleText, rules.min8 ? styles.ruleOkTxt : styles.ruleBadTxt]}>
-            At least 8 characters
-          </Text>
-        </View>
-
-        <View style={styles.ruleRow}>
-          <Text style={[styles.ruleDot, rules.upper ? styles.ruleOk : styles.ruleBad]}>•</Text>
-          <Text style={[styles.ruleText, rules.upper ? styles.ruleOkTxt : styles.ruleBadTxt]}>
-            At least 1 uppercase letter (A–Z)
-          </Text>
-        </View>
-
-        <View style={styles.ruleRow}>
-          <Text style={[styles.ruleDot, rules.lower ? styles.ruleOk : styles.ruleBad]}>•</Text>
-          <Text style={[styles.ruleText, rules.lower ? styles.ruleOkTxt : styles.ruleBadTxt]}>
-            At least 1 lowercase letter (a–z)
-          </Text>
-        </View>
-
-        <View style={styles.ruleRow}>
-          <Text style={[styles.ruleDot, rules.special ? styles.ruleOk : styles.ruleBad]}>•</Text>
-          <Text style={[styles.ruleText, rules.special ? styles.ruleOkTxt : styles.ruleBadTxt]}>
-            At least 1 special character (!@#…)
-          </Text>
-        </View>
-      </View>
+  const FpPasswordRulesUI =
+    !fpPassTouched ? null : (
+      <PasswordRulesBox rules={passRules(fpPassword)} />
     );
 
   return (
@@ -852,8 +1089,15 @@ export default function LoginRegister({ onLoginSuccess }) {
                         Your password should be memorable for you and hard to guess for anyone else.
                       </Text>
 
-                      <TouchableOpacity activeOpacity={0.85} onPress={onCreateAccount} style={styles.primaryBtn}>
-                        <Text style={styles.primaryBtnText}>Create Account</Text>
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        disabled={createBusy}
+                        onPress={onCreateAccount}
+                        style={[styles.primaryBtn, createBusy && { opacity: 0.7 }]}
+                      >
+                        <Text style={styles.primaryBtnText}>
+                          {createBusy ? "Checking..." : "Create Account"}
+                        </Text>
                       </TouchableOpacity>
 
                       <View style={styles.switchRow}>
@@ -953,7 +1197,7 @@ export default function LoginRegister({ onLoginSuccess }) {
                   onChangeText={onFpEmailChange}
                   placeholder="Enter your email"
                   keyboardType="email-address"
-                  error={errors.fpEmail}
+                  error={isFpLocked ? fpCooldownText : errors.fpEmail}
                 />
 
                 <View style={styles.modalBtnRow}>
@@ -967,11 +1211,13 @@ export default function LoginRegister({ onLoginSuccess }) {
 
                   <TouchableOpacity
                     activeOpacity={0.85}
-                    disabled={fpBusy}
+                    disabled={fpBusy || isFpLocked}
                     onPress={onFpSendOtp}
-                    style={[styles.modalBtn, fpBusy && { opacity: 0.65 }]}
+                    style={[styles.modalBtn, (fpBusy || isFpLocked) && { opacity: 0.65 }]}
                   >
-                    <Text style={styles.modalBtnTxt}>{fpBusy ? "Sending..." : "Send OTP"}</Text>
+                    <Text style={styles.modalBtnTxt}>
+                      {fpBusy ? "Sending..." : isFpLocked ? `Wait (${formatFpTimer(fpCooldownSeconds)})` : "Send OTP"}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -990,10 +1236,10 @@ export default function LoginRegister({ onLoginSuccess }) {
                 <Field
                   label=""
                   value={fpInput}
-                  onChangeText={(v) => setFpInput(v.replace(/[^\d]/g, "").slice(0, 6))}
-                  placeholder="Enter code"
+                  onChangeText={onFpCodeChange}
+                  placeholder="Enter 6-digit code"
                   keyboardType="number-pad"
-                  error={errors.fpCode}
+                  error={isFpLocked ? fpCooldownText : errors.fpCode}
                 />
 
                 <View style={styles.modalBtnRow}>
@@ -1007,9 +1253,9 @@ export default function LoginRegister({ onLoginSuccess }) {
 
                   <TouchableOpacity
                     activeOpacity={0.85}
-                    disabled={fpBusy}
+                    disabled={fpBusy || isFpLocked}
                     onPress={onFpVerifyOtp}
-                    style={[styles.modalBtn, fpBusy && { opacity: 0.65 }]}
+                    style={[styles.modalBtn, (fpBusy || isFpLocked) && { opacity: 0.65 }]}
                   >
                     <Text style={styles.modalBtnTxt}>{fpBusy ? "Verifying..." : "Continue"}</Text>
                   </TouchableOpacity>
@@ -1017,11 +1263,17 @@ export default function LoginRegister({ onLoginSuccess }) {
 
                 <TouchableOpacity
                   activeOpacity={0.85}
-                  disabled={fpBusy}
+                  disabled={fpBusy || isFpLocked}
                   onPress={onFpSendOtp}
-                  style={[styles.resendBtn, fpBusy && { opacity: 0.6 }]}
+                  style={[styles.resendBtn, (fpBusy || isFpLocked) && { opacity: 0.6 }]}
                 >
-                  <Text style={styles.resendTxt}>{fpBusy ? "Sending..." : "Resend code"}</Text>
+                  <Text style={styles.resendTxt}>
+                    {fpBusy
+                      ? "Sending..."
+                      : isFpLocked
+                      ? `Resend code in ${formatFpTimer(fpCooldownSeconds)}`
+                      : "Resend code"}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1030,65 +1282,53 @@ export default function LoginRegister({ onLoginSuccess }) {
           <Modal visible={fpStep === "reset"} transparent animationType="fade">
             <Pressable style={styles.modalOverlay} onPress={closeForgot} />
             <View style={styles.modalCenter}>
-              <View style={styles.modalCard}>
-                <Text style={styles.modalTitle}>Create New Password</Text>
-                <Text style={styles.modalSub}>
-                  Your code has been verified. Enter a new password for {fpEmail || "your account"}.
-                </Text>
+              <View style={[styles.modalCard, { maxHeight: "90%" }]}>
+                <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                  <Text style={styles.modalTitle}>Create New Password</Text>
+                  <Text style={styles.modalSub}>
+                    Your code has been verified. Enter a new password for {fpEmail || "your account"}.
+                  </Text>
 
-                <PasswordField
-                  label="New Password"
-                  value={fpPassword}
-                  onChangeText={(v) => {
-                    setFpPassword(v);
-                    if (!clean(v)) setErrKey("fpPass", "Password is required.");
-                    else if (!passStrong(v)) setErrKey("fpPass", "Password is not strong enough.");
-                    else setErrKey("fpPass", "");
+                  <PasswordField
+                    label="New Password"
+                    value={fpPassword}
+                    onChangeText={onFpPassChange}
+                    placeholder="Enter your new password"
+                    show={fpShowPassword}
+                    onToggle={() => setFpShowPassword((s) => !s)}
+                    error={errors.fpPass}
+                    below={FpPasswordRulesUI}
+                  />
 
-                    if (clean(fpConfirmPassword)) {
-                      if (v !== fpConfirmPassword) setErrKey("fpConfirm", "Passwords do not match.");
-                      else setErrKey("fpConfirm", "");
-                    }
-                  }}
-                  placeholder="Enter your new password"
-                  show={fpShowPassword}
-                  onToggle={() => setFpShowPassword((s) => !s)}
-                  error={errors.fpPass}
-                />
+                  <PasswordField
+                    label="Confirm Password"
+                    value={fpConfirmPassword}
+                    onChangeText={onFpConfirmPassChange}
+                    placeholder="Confirm your new password"
+                    show={fpShowConfirmPassword}
+                    onToggle={() => setFpShowConfirmPassword((s) => !s)}
+                    error={errors.fpConfirm}
+                  />
 
-                <PasswordField
-                  label="Confirm Password"
-                  value={fpConfirmPassword}
-                  onChangeText={(v) => {
-                    setFpConfirmPassword(v);
-                    if (!clean(v)) setErrKey("fpConfirm", "Confirm password is required.");
-                    else if (v !== fpPassword) setErrKey("fpConfirm", "Passwords do not match.");
-                    else setErrKey("fpConfirm", "");
-                  }}
-                  placeholder="Confirm your new password"
-                  show={fpShowConfirmPassword}
-                  onToggle={() => setFpShowConfirmPassword((s) => !s)}
-                  error={errors.fpConfirm}
-                />
+                  <View style={styles.modalBtnRow}>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={closeForgot}
+                      style={[styles.modalBtn, styles.modalBtnGhost]}
+                    >
+                      <Text style={styles.modalBtnGhostTxt}>Cancel</Text>
+                    </TouchableOpacity>
 
-                <View style={styles.modalBtnRow}>
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    onPress={closeForgot}
-                    style={[styles.modalBtn, styles.modalBtnGhost]}
-                  >
-                    <Text style={styles.modalBtnGhostTxt}>Cancel</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    disabled={fpBusy}
-                    onPress={onFpResetPassword}
-                    style={[styles.modalBtn, fpBusy && { opacity: 0.65 }]}
-                  >
-                    <Text style={styles.modalBtnTxt}>{fpBusy ? "Updating..." : "Update Password"}</Text>
-                  </TouchableOpacity>
-                </View>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      disabled={fpBusy}
+                      onPress={onFpResetPassword}
+                      style={[styles.modalBtn, fpBusy && { opacity: 0.65 }]}
+                    >
+                      <Text style={styles.modalBtnTxt}>{fpBusy ? "Updating..." : "Update Password"}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
               </View>
             </View>
           </Modal>

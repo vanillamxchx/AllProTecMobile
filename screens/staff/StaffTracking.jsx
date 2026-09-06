@@ -56,8 +56,12 @@ export default function StaffTracking() {
   const filtered = useMemo(() => {
     const q = String(query || "").trim().toLowerCase();
     return bookings.filter((booking) => {
+      const vehicleStr = `${booking.vehicle || ""} ${booking.vehicleType || ""} ${booking.vehicleModel || ""} ${booking.car || ""} ${booking.plateNumber || ""} ${booking.plate || ""}`.trim();
       const matchesQuery =
-        !q || `${booking.id} ${booking.customer} ${booking.status} ${booking.service}`.toLowerCase().includes(q);
+        !q ||
+        `${booking.id || ""} ${booking.customer || ""} ${booking.status || ""} ${booking.service || ""} ${vehicleStr} ${booking.assigned || ""}`
+          .toLowerCase()
+          .includes(q);
       const matchesStatus = filters.status === "All" || String(booking.status || "").trim() === filters.status;
       const matchesService = filters.service === "All" || String(booking.service || "").trim() === filters.service;
       return matchesQuery && matchesStatus && matchesService;
@@ -101,7 +105,7 @@ export default function StaffTracking() {
                   setQuery(value);
                   setPage(1);
                 }}
-                placeholder="Search Bookings..."
+                placeholder="Search Bookings or Vehicles..."
                 placeholderTextColor="#9AA0A6"
                 style={styles.searchInput}
               />
@@ -112,6 +116,14 @@ export default function StaffTracking() {
             </TouchableOpacity>
           </View>
 
+          {Boolean(query.trim()) && filtered.length === 0 && (
+            <View style={{ marginTop: -4, marginBottom: 8, paddingHorizontal: 4 }}>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#DC2626" }}>
+                No records match "{query.trim()}". Please check your vehicle or booking details.
+              </Text>
+            </View>
+          )}
+
           <View style={styles.tableCard}>
             <View style={styles.tableHead}>
               <Text style={[styles.th, styles.colId]}>Booking ID</Text>
@@ -120,44 +132,59 @@ export default function StaffTracking() {
               <Text style={[styles.th, styles.colAction]}>Action</Text>
             </View>
 
-            {paged.map((booking, idx) => (
-              <View key={booking.id} style={[styles.tr, idx === paged.length - 1 && styles.trLast]}>
-                <Text style={[styles.td, styles.colId]}>{booking.id}</Text>
-                <Text style={[styles.td, styles.colCustomer]}>{booking.customer}</Text>
+            {paged.length === 0 ? (
+              <View style={{ paddingVertical: 28, paddingHorizontal: 16, alignItems: "center", justifyContent: "center" }}>
+                <Text style={{ fontSize: 14, fontWeight: "800", color: "#111827", textAlign: "center" }}>
+                  {query.trim() ? "No matching tracking records" : "No records found"}
+                </Text>
+                <Text style={{ fontSize: 12, fontWeight: "600", color: "#6B7280", marginTop: 4, textAlign: "center" }}>
+                  {query.trim()
+                    ? `No records found matching vehicle or details for "${query.trim()}".`
+                    : "No tracking records are available for the selected filters."}
+                </Text>
+              </View>
+            ) : (
+              paged.map((booking, idx) => (
+                <View key={booking.id} style={[styles.tr, idx === paged.length - 1 && styles.trLast]}>
+                  <Text style={[styles.td, styles.colId]}>{booking.id}</Text>
+                  <Text style={[styles.td, styles.colCustomer]}>{booking.customer}</Text>
 
-                <View style={[styles.colStatus, styles.statusCell]}>
-                  <View style={[styles.statusPill, statusStyle(booking.status)]}>
-                    <Text style={styles.statusTxt}>{getTrackingStatusMeta(booking.status).label}</Text>
+                  <View style={[styles.colStatus, styles.statusCell]}>
+                    <View style={[styles.statusPill, statusStyle(booking.status)]}>
+                      <Text style={styles.statusTxt}>{getTrackingStatusMeta(booking.status).label}</Text>
+                    </View>
+                  </View>
+
+                  <View style={[styles.colAction, styles.actionCell]}>
+                    <TouchableOpacity activeOpacity={0.85} style={styles.viewBtn} onPress={() => {
+                      setSelected({
+                        ...booking,
+                        vehicleModel: booking.vehicle,
+                        assignedTo: booking.assigned || "-",
+                      });
+                      setModalOpen(true);
+                    }}>
+                      <Text style={styles.viewTxt}>View Details</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
+              ))
+            )}
+          </View>
 
-                <View style={[styles.colAction, styles.actionCell]}>
-                  <TouchableOpacity activeOpacity={0.85} style={styles.viewBtn} onPress={() => {
-                    setSelected({
-                      ...booking,
-                      vehicleModel: booking.vehicle,
-                      assignedTo: booking.assigned || "-",
-                    });
-                    setModalOpen(true);
-                  }}>
-                    <Text style={styles.viewTxt}>View Details</Text>
-                  </TouchableOpacity>
-                </View>
+          {filtered.length > pageSize && (
+            <View style={styles.pager}>
+              <TouchableOpacity activeOpacity={0.85} style={styles.pageBtn} onPress={() => setPage((p) => Math.max(1, p - 1))}>
+                <Text style={styles.pageTxt}>{"<"}</Text>
+              </TouchableOpacity>
+              <View style={styles.pageNum}>
+                <Text style={styles.pageNumTxt}>{safePage}</Text>
               </View>
-            ))}
-          </View>
-
-          <View style={styles.pager}>
-            <TouchableOpacity activeOpacity={0.85} style={styles.pageBtn} onPress={() => setPage((p) => Math.max(1, p - 1))}>
-              <Text style={styles.pageTxt}>{"<"}</Text>
-            </TouchableOpacity>
-            <View style={styles.pageNum}>
-              <Text style={styles.pageNumTxt}>{safePage}</Text>
+              <TouchableOpacity activeOpacity={0.85} style={styles.pageBtn} onPress={() => setPage((p) => Math.min(totalPages, p + 1))}>
+                <Text style={styles.pageTxt}>{">"}</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity activeOpacity={0.85} style={styles.pageBtn} onPress={() => setPage((p) => Math.min(totalPages, p + 1))}>
-              <Text style={styles.pageTxt}>{">"}</Text>
-            </TouchableOpacity>
-          </View>
+          )}
         </ScrollView>
 
         <TrackingModal visible={modalOpen} booking={selected} onClose={() => setModalOpen(false)} />

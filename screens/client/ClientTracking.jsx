@@ -61,8 +61,9 @@ export default function ClientTracking() {
   const filtered = useMemo(() => {
     const q = String(query || "").trim().toLowerCase();
     return scopedBookings.filter((booking) => {
+      const vehicleStr = `${booking.vehicle || ""} ${booking.vehicleType || ""} ${booking.vehicleModel || ""} ${booking.car || ""} ${booking.plateNumber || ""} ${booking.plate || ""}`.trim();
       const matchesQuery =
-        !q || `${booking.id} ${booking.customer} ${booking.service} ${booking.status}`.toLowerCase().includes(q);
+        !q || `${booking.id} ${booking.customer} ${booking.service} ${booking.status} ${vehicleStr}`.toLowerCase().includes(q);
       const matchesService = filters.service === "All" || String(booking.service || "").trim() === filters.service;
       const matchesStatus = filters.status === "All" || String(booking.status || "").trim() === filters.status;
       return matchesQuery && matchesService && matchesStatus;
@@ -106,6 +107,14 @@ export default function ClientTracking() {
             </TouchableOpacity>
           </View>
 
+          {Boolean(query.trim()) && filtered.length === 0 && (
+            <View style={{ marginTop: -4, marginBottom: 8, paddingHorizontal: 4 }}>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#DC2626" }}>
+                No records match "{query.trim()}". Please check your vehicle or booking details.
+              </Text>
+            </View>
+          )}
+
           <View style={styles.tableCard}>
             <View style={styles.tHead}>
               <Text style={[styles.th, styles.thId]}>Booking ID</Text>
@@ -116,7 +125,11 @@ export default function ClientTracking() {
 
             {pageRows.length === 0 ? (
               <View style={styles.emptyRow}>
-                <Text style={styles.emptyTxt}>No records found.</Text>
+                <Text style={styles.emptyTxt}>
+                  {query.trim()
+                    ? `No records match "${query.trim()}". Check spelling or search by vehicle, booking ID, or service.`
+                    : "No records found."}
+                </Text>
               </View>
             ) : (
               pageRows.map((booking) => {
@@ -146,17 +159,19 @@ export default function ClientTracking() {
             )}
           </View>
 
-          <View style={styles.pagerRow}>
-            <TouchableOpacity activeOpacity={0.85} style={styles.pagerBtn} onPress={() => setPage((p) => Math.max(1, p - 1))}>
-              <Text style={styles.pagerTxt}>{"<"}</Text>
-            </TouchableOpacity>
-            <View style={styles.pagePill}>
-              <Text style={styles.pageTxt}>{safePage}</Text>
+          {filtered.length > pageSize && (
+            <View style={styles.pagerRow}>
+              <TouchableOpacity activeOpacity={0.85} style={styles.pagerBtn} onPress={() => setPage((p) => Math.max(1, p - 1))}>
+                <Text style={styles.pagerTxt}>{"<"}</Text>
+              </TouchableOpacity>
+              <View style={styles.pagePill}>
+                <Text style={styles.pageTxt}>{safePage}</Text>
+              </View>
+              <TouchableOpacity activeOpacity={0.85} style={styles.pagerBtn} onPress={() => setPage((p) => Math.min(totalPages, p + 1))}>
+                <Text style={styles.pagerTxt}>{">"}</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity activeOpacity={0.85} style={styles.pagerBtn} onPress={() => setPage((p) => Math.min(totalPages, p + 1))}>
-              <Text style={styles.pagerTxt}>{">"}</Text>
-            </TouchableOpacity>
-          </View>
+          )}
 
           <View style={{ height: 12 }} />
         </ScrollView>

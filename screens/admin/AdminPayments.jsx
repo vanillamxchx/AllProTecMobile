@@ -47,9 +47,10 @@ export default function AdminPayments() {
     const q = String(query || "").trim().toLowerCase();
     return payments.filter((payment) => {
       const stageLabel = getPaymentStageLabel(payment);
+      const vehicleStr = `${payment.vehicle || ""} ${payment.vehicleType || ""} ${payment.vehicleModel || ""} ${payment.car || ""} ${payment.plateNumber || ""} ${payment.plate || ""}`.trim();
       const matchesQuery =
         !q ||
-        `${payment.id} ${payment.bookingId || ""} ${payment.customer} ${payment.status} ${stageLabel} ${payment.service} ${payment.method || ""} ${payment.downPaymentMethod || ""} ${payment.finalPaymentMethod || ""}`
+        `${payment.id} ${payment.bookingId || ""} ${payment.customer} ${payment.status} ${stageLabel} ${payment.service} ${vehicleStr} ${payment.method || ""} ${payment.downPaymentMethod || ""} ${payment.finalPaymentMethod || ""}`
           .toLowerCase()
           .includes(q);
       const matchesStatus = filters.status === "All" || stageLabel === filters.status || String(payment.status || "").trim() === filters.status;
@@ -130,6 +131,14 @@ export default function AdminPayments() {
             </TouchableOpacity>
           </View>
 
+          {Boolean(query.trim()) && filtered.length === 0 && (
+            <View style={{ marginTop: -4, marginBottom: 8, paddingHorizontal: 4 }}>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#DC2626" }}>
+                No payments match "{query.trim()}". Please try a different keyword or check payment details.
+              </Text>
+            </View>
+          )}
+
           <View style={styles.tableCard}>
             <View style={styles.tableHead}>
               <Text style={[styles.th, styles.colId]}>Booking ID</Text>
@@ -138,63 +147,75 @@ export default function AdminPayments() {
               <Text style={[styles.th, styles.colAction]}>Action</Text>
             </View>
 
-            {paged.map((payment, idx) => {
-              const stageLabel = getPaymentStageLabel(payment);
-              return (
-              <View key={payment.id} style={[styles.tr, idx === paged.length - 1 && styles.trLast]}>
-                <Text style={[styles.td, styles.colId]}>{payment.bookingId || payment.id}</Text>
-                <Text style={[styles.td, styles.colCustomer]}>{payment.customer}</Text>
-
-                <View style={[styles.colStatus, styles.statusCell]}>
-                  <View style={[styles.statusPill, statusStyle(stageLabel)]}>
-                    <Text style={styles.statusTxt}>{stageLabel}</Text>
-                  </View>
-                </View>
-
-                <View style={[styles.colAction, styles.actionCell]}>
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    style={styles.viewBtn}
-                    onPress={() => {
-                      setSelected({
-                        ...payment,
-                        id: payment.bookingId || payment.id,
-                        date: payment.date,
-                        customer: payment.customer,
-                        customerEmail: payment.customerEmail,
-                        service: payment.service,
-                        amount: payment.amount,
-                        originalAmount: payment.originalAmount,
-                        promoDiscountAmount: payment.promoDiscountAmount,
-                        promoTitle: payment.promoTitle,
-                        promoDiscountPercent: payment.promoDiscountPercent,
-                        status: payment.status,
-                        method: payment.method,
-                        reference: payment.reference,
-                        proofSubmittedAt: payment.proofSubmittedAt,
-                      });
-                      setModalOpen(true);
-                    }}
-                  >
-                    <Text style={styles.viewTxt}>View Details</Text>
-                  </TouchableOpacity>
-                </View>
+            {paged.length === 0 ? (
+              <View style={{ paddingVertical: 28, alignItems: "center", justifyContent: "center" }}>
+                <Text style={{ color: "#6B7280", fontSize: 13, textAlign: "center" }}>
+                  {query.trim()
+                    ? `No payments match "${query.trim()}". Try searching by customer, booking ID, or service.`
+                    : "No payments found."}
+                </Text>
               </View>
-              );
-            })}
+            ) : (
+              paged.map((payment, idx) => {
+                const stageLabel = getPaymentStageLabel(payment);
+                return (
+                  <View key={payment.id} style={[styles.tr, idx === paged.length - 1 && styles.trLast]}>
+                    <Text style={[styles.td, styles.colId]}>{payment.bookingId || payment.id}</Text>
+                    <Text style={[styles.td, styles.colCustomer]}>{payment.customer}</Text>
+
+                    <View style={[styles.colStatus, styles.statusCell]}>
+                      <View style={[styles.statusPill, statusStyle(stageLabel)]}>
+                        <Text style={styles.statusTxt}>{stageLabel}</Text>
+                      </View>
+                    </View>
+
+                    <View style={[styles.colAction, styles.actionCell]}>
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        style={styles.viewBtn}
+                        onPress={() => {
+                          setSelected({
+                            ...payment,
+                            id: payment.bookingId || payment.id,
+                            date: payment.date,
+                            customer: payment.customer,
+                            customerEmail: payment.customerEmail,
+                            service: payment.service,
+                            amount: payment.amount,
+                            originalAmount: payment.originalAmount,
+                            promoDiscountAmount: payment.promoDiscountAmount,
+                            promoTitle: payment.promoTitle,
+                            promoDiscountPercent: payment.promoDiscountPercent,
+                            status: payment.status,
+                            method: payment.method,
+                            reference: payment.reference,
+                            proofSubmittedAt: payment.proofSubmittedAt,
+                          });
+                          setModalOpen(true);
+                        }}
+                      >
+                        <Text style={styles.viewTxt}>View Details</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })
+            )}
           </View>
 
-          <View style={styles.pager}>
-            <TouchableOpacity activeOpacity={0.85} style={styles.pageBtn} onPress={() => setPage((p) => Math.max(1, p - 1))}>
-              <Text style={styles.pageTxt}>{"<"}</Text>
-            </TouchableOpacity>
-            <View style={styles.pageNum}>
-              <Text style={styles.pageNumTxt}>{safePage}</Text>
+          {filtered.length > pageSize && (
+            <View style={styles.pager}>
+              <TouchableOpacity activeOpacity={0.85} style={styles.pageBtn} onPress={() => setPage((p) => Math.max(1, p - 1))}>
+                <Text style={styles.pageTxt}>{"<"}</Text>
+              </TouchableOpacity>
+              <View style={styles.pageNum}>
+                <Text style={styles.pageNumTxt}>{safePage}</Text>
+              </View>
+              <TouchableOpacity activeOpacity={0.85} style={styles.pageBtn} onPress={() => setPage((p) => Math.min(totalPages, p + 1))}>
+                <Text style={styles.pageTxt}>{">"}</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity activeOpacity={0.85} style={styles.pageBtn} onPress={() => setPage((p) => Math.min(totalPages, p + 1))}>
-              <Text style={styles.pageTxt}>{">"}</Text>
-            </TouchableOpacity>
-          </View>
+          )}
         </ScrollView>
 
         <PaymentModal
