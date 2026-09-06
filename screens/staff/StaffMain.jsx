@@ -17,8 +17,12 @@ import StaffEngagement from "./StaffEngagement";
 import StaffProfile from "./StaffProfile";
 import StaffMyWork from "./StaffMyWork.jsx";
 import AdminDetailerManagement from "../admin/AdminDetailerManagement.jsx";
+import AdminAnalytics from "../admin/AdminAnalytics.jsx";
+import AdminFinancialTracker from "../admin/AdminFinancialTracker.jsx";
+import AdminAuditLogs from "../admin/AdminAuditLogs.jsx";
 import NotificationCenterModal from "../../components/common/NotificationCenterModal.jsx";
 import { useMobileData } from "../../context/MobileDataContext.jsx";
+import { MODULE_KEYS, canAccessModule } from "../../services/rbac";
 
 export default function StaffMain({ session, onLogout }) {
   const { notifications, unreadNotificationCount, markNotificationsRead, loading, currentUser } = useMobileData();
@@ -50,19 +54,44 @@ export default function StaffMain({ session, onLogout }) {
       <View style={styles.stage}>
         <View style={styles.content}>
           {screen === "dashboard" ? <StaffDashboard session={session} goTo={goTo} /> : null}
-          {screen === "my-work" ? <StaffMyWork session={session} /> : null}
-          {screen === "bookings" ? <StaffBookings /> : null}
-          {screen === "tracking" ? <StaffTracking session={session} /> : null}
-          {screen === "payments" ? <StaffPayments session={session} /> : null}
+          {screen === "my-work" && canAccessModule(currentUser, MODULE_KEYS.myWork) ? (
+            <StaffMyWork session={session} />
+          ) : null}
+          {screen === "bookings" && canAccessModule(currentUser, MODULE_KEYS.bookings) ? (
+            <StaffBookings />
+          ) : null}
+          {screen === "tracking" && canAccessModule(currentUser, MODULE_KEYS.serviceTracking) ? (
+            <StaffTracking session={session} />
+          ) : null}
+          {screen === "payments" && canAccessModule(currentUser, MODULE_KEYS.paymentTracking) ? (
+            <StaffPayments session={session} onBack={() => goTo("more")} />
+          ) : null}
           {screen === "more" ? <StaffMore goTo={goTo} currentUser={currentUser} /> : null}
-          {screen === "services" && <StaffServices />}
-          {screen === "inventory" && <StaffInventory />}
-          {screen === "engagement" && <StaffEngagement />}
-          {screen === "detailer-management" && <AdminDetailerManagement />}
+          {screen === "services" && canAccessModule(currentUser, MODULE_KEYS.services) ? (
+            <StaffServices />
+          ) : null}
+          {screen === "inventory" && canAccessModule(currentUser, MODULE_KEYS.stockMonitoring) ? (
+            <StaffInventory onBack={() => goTo("more")} />
+          ) : null}
+          {screen === "engagement" && canAccessModule(currentUser, MODULE_KEYS.engagement) ? (
+            <StaffEngagement />
+          ) : null}
+          {screen === "detailer-management" && canAccessModule(currentUser, MODULE_KEYS.detailerManagement) ? (
+            <AdminDetailerManagement />
+          ) : null}
+          {screen === "analytics" && canAccessModule(currentUser, MODULE_KEYS.analytics) ? (
+            <AdminAnalytics onBack={() => goTo("more")} />
+          ) : null}
+          {screen === "financial" && canAccessModule(currentUser, MODULE_KEYS.financialTracker) ? (
+            <AdminFinancialTracker onBack={() => goTo("more")} />
+          ) : null}
+          {screen === "audit" && canAccessModule(currentUser, MODULE_KEYS.auditLogs) ? (
+            <AdminAuditLogs onBack={() => goTo("more")} />
+          ) : null}
           {screen === "profile" && <StaffProfile session={session} />}
         </View>
 
-        <StaffBottomNav active={screen} onTab={goTo} />
+        <StaffBottomNav active={screen} onTab={goTo} currentUser={currentUser} />
       </View>
     </SafeAreaView>
   );

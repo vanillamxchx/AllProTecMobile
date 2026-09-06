@@ -600,9 +600,12 @@ export async function apiRequest(path, options = {}) {
       const nextResponse = await fetchWithTimeout(requestUrl, {
         headers: {
           "Content-Type": "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
           ...(activeAuthToken ? { Authorization: `Bearer ${activeAuthToken}` } : {}),
           ...(options.headers || {}),
         },
+        ...(method === "GET" ? { cache: "no-store" } : {}),
         ...options,
       });
       const nextBaseUrl =

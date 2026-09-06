@@ -23,15 +23,35 @@ const INITIAL_DATA = {
   customerRewards: [],
 };
 
+const ALL_STAFF_ROLE_STRINGS = new Set([
+  "staff",
+  "mechanic",
+  "inspector",
+  "coordinator",
+  "detailer",
+  "technician",
+  "employee",
+  "manager",
+  "senior staff",
+  "junior staff",
+  "general manager",
+  "sales manager",
+  "sales associate",
+  "inventory clerk",
+  "junior detailer",
+  "senior detailer",
+  "marketing",
+]);
+
 function normalizeRole(userType, role) {
   const normalizedUserType = String(userType || "").trim().toLowerCase();
   if (["admin", "staff", "client", "customer"].includes(normalizedUserType)) {
     return normalizedUserType === "customer" ? "client" : normalizedUserType;
   }
 
-  const normalizedRole = String(role || "").trim().toLowerCase();
+  const normalizedRole = String(role || "").trim().toLowerCase().replace(/\s+/g, " ");
   if (["admin", "owner", "co-owner"].includes(normalizedRole)) return "admin";
-  if (["staff", "mechanic", "inspector", "coordinator"].includes(normalizedRole)) return "staff";
+  if (ALL_STAFF_ROLE_STRINGS.has(normalizedRole)) return "staff";
   return "client";
 }
 
@@ -44,8 +64,316 @@ function normalizeName(value) {
 }
 
 function getAuditLogKey(log) {
-  return String(log?.id || log?._id || "").trim();
+  return String(log?.id || log?._id || log?.auditId || "").trim();
 }
+
+export function formatAuditTimestamp(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return String(dateStr);
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function getAuditSortTime(log = {}) {
+  const candidates = [
+    log.createdAt,
+    log.timestamp,
+    log.ts,
+    log.updatedAt,
+    log.date,
+  ];
+  for (const c of candidates) {
+    if (c) {
+      const t = new Date(c).getTime();
+      if (!Number.isNaN(t)) return t;
+    }
+  }
+  return 0;
+}
+
+function normalizeAuditLog(log = {}, index = 0) {
+  const nextLog = log && typeof log === "object" ? log : {};
+  const id = String(nextLog.id || nextLog._id || nextLog.auditId || `AUDIT-${1000 + index}`).trim();
+  const userId = String(
+    nextLog.userId ||
+    nextLog.user ||
+    nextLog.auditUser ||
+    nextLog.actor ||
+    nextLog.userEmail ||
+    nextLog.performedBy ||
+    nextLog.adminEmail ||
+    "System"
+  ).trim();
+  const action = String(
+    nextLog.action ||
+    nextLog.title ||
+    nextLog.event ||
+    nextLog.activity ||
+    nextLog.description ||
+    "System update"
+  ).trim();
+  const targetId = String(
+    nextLog.targetId ||
+    nextLog.target ||
+    nextLog.target_id ||
+    nextLog.entityId ||
+    nextLog.bookingId ||
+    ""
+  ).trim();
+  const rawTs = nextLog.ts || nextLog.timestamp || nextLog.createdAt || nextLog.date || nextLog.time || "";
+  const formattedTs = formatAuditTimestamp(rawTs);
+
+  return {
+    ...nextLog,
+    id,
+    _id: nextLog._id || id,
+    userId,
+    user: userId,
+    action,
+    targetId: targetId || "-",
+    ts: formattedTs || (typeof rawTs === "string" && rawTs ? rawTs : "Recent"),
+    createdAt: nextLog.createdAt || rawTs || new Date().toISOString(),
+    timestamp: nextLog.timestamp || rawTs || new Date().toISOString(),
+    archived: Boolean(nextLog.archived || nextLog.isArchived),
+    isArchived: Boolean(nextLog.archived || nextLog.isArchived),
+  };
+}
+
+function extractAuditLogsFromPayload(payload) {
+  if (!payload || typeof payload !== "object") return [];
+  if (Array.isArray(payload)) return payload;
+  const candidates = [
+    payload.auditLogs,
+    payload.audit,
+    payload.audits,
+    payload.auditTrail,
+    payload.logs,
+    payload.activityLogs,
+    payload.auditRecords,
+    payload.data?.auditLogs,
+    payload.data?.logs,
+    payload.data?.audit,
+  ];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate) && candidate.length > 0) {
+      return candidate;
+    }
+  }
+  return Array.isArray(payload.auditLogs) ? payload.auditLogs : [];
+}
+
+const QUOTE_STORAGE_KEY = "allprotec.quoteRequests";
+
+function clearStoredMockQuotes() {
+  const storage = getWebStorage();
+  if (!storage) return;
+  try {
+    storage.removeItem(QUOTE_STORAGE_KEY);
+  } catch (_e) {
+    // Ignore storage errors
+  }
+}
+clearStoredMockQuotes();
+
+function normalizeQuoteRequest(item = {}, index = 0) {
+  const next = item && typeof item === "object" ? item : {};
+  const id = String(next.id || next._id || next.quoteId || next.requestId || "").trim();
+  const fullName = String(
+    next.fullName || next.name || next.customerName || next.customer || next.client || next.clientName || ""
+  ).trim();
+  const phone = String(
+    next.phone || next.mobile || next.phoneNumber || next.contact || next.contactNumber || ""
+  ).trim();
+  const email = String(next.email || next.customerEmail || next.clientEmail || "").trim();
+  const vehicleType = String(
+    next.vehicleType || next.vehicle || next.car || next.carType || next.model || ""
+  ).trim();
+  const carSize = String(
+    next.carSize || next.size || next.vehicleSize || next.category || ""
+  ).trim();
+  const service = String(
+    next.service || next.serviceName || next.serviceType || next.package || ""
+  ).trim();
+  const estimateLabel = String(
+    next.estimateLabel ||
+      next.estimate ||
+      next.priceLabel ||
+      (next.price !== undefined ? formatCurrency(next.price) : "") ||
+      (next.amount !== undefined ? formatCurrency(next.amount) : "") ||
+      ""
+  ).trim();
+  const message = String(
+    next.message || next.notes || next.note || next.inquiry || next.details || next.remarks || next.description || ""
+  ).trim();
+  const rawStatus = String(next.status || "Received").trim();
+  const status = rawStatus.toLowerCase() === "received" ? "Received" : rawStatus ? rawStatus : "Received";
+  const createdAt = next.createdAt || next.created_at || next.date || next.timestamp || next.ts || "";
+  const updatedAt = next.updatedAt || next.updated_at || createdAt || "";
+
+  return {
+    ...next,
+    id: id || `quote-${index + 1}`,
+    _id: next._id || id || `quote-${index + 1}`,
+    fullName: fullName || "Unknown Customer",
+    phone: phone || "-",
+    email,
+    vehicleType: vehicleType || "-",
+    carSize: carSize || "-",
+    service: service || "General Service",
+    estimateLabel: estimateLabel || "Custom quote available upon review",
+    message: message || "No additional notes provided.",
+    status,
+    createdAt,
+    updatedAt,
+  };
+}
+
+function extractQuoteRequestsFromPayload(payload) {
+  if (!payload || typeof payload !== "object") return [];
+  if (Array.isArray(payload)) return payload;
+
+  const quoteKeys = [
+    "quoteRequests",
+    "quotes",
+    "quote_requests",
+    "quoterequests",
+    "landingPageQuotes",
+    "landingQuotes",
+    "quoteInquiries",
+    "quotations",
+    "inquiries",
+    "leads",
+    "requests",
+  ];
+
+  // 1. Direct specific keys that have items
+  for (const key of quoteKeys) {
+    if (Array.isArray(payload[key]) && payload[key].length > 0) {
+      return payload[key];
+    }
+  }
+
+  // 2. Specific keys nested in payload.data that have items
+  if (payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)) {
+    for (const key of quoteKeys) {
+      if (Array.isArray(payload.data[key]) && payload.data[key].length > 0) {
+        return payload.data[key];
+      }
+    }
+  }
+
+  // 3. Specific keys nested in payload.payload that have items
+  if (payload.payload && typeof payload.payload === "object" && !Array.isArray(payload.payload)) {
+    for (const key of quoteKeys) {
+      if (Array.isArray(payload.payload[key]) && payload.payload[key].length > 0) {
+        return payload.payload[key];
+      }
+    }
+  }
+
+  // 4. Any direct specific keys even if empty
+  for (const key of quoteKeys) {
+    if (Array.isArray(payload[key])) {
+      return payload[key];
+    }
+  }
+
+  // 5. If payload.data itself is an array of items
+  if (Array.isArray(payload.data) && payload.data.length > 0) {
+    return payload.data;
+  }
+
+  // 6. Generic list wrappers
+  if (Array.isArray(payload.items) && payload.items.length > 0) return payload.items;
+  if (Array.isArray(payload.results) && payload.results.length > 0) return payload.results;
+  if (Array.isArray(payload.rows) && payload.rows.length > 0) return payload.rows;
+
+  if (Array.isArray(payload.data)) return payload.data;
+  return [];
+}
+
+function generateOperationalAuditLogs(inventory = [], bookings = [], sessionUser = null) {
+  const syntheticLogs = [];
+  const actorName = sessionUser?.name || sessionUser?.email || "Inventory Clerk";
+
+  // From inventory items (stock monitoring)
+  (inventory || []).forEach((item, idx) => {
+    const itemName = String(item.name || item.itemName || `Stock Item ${idx + 1}`).trim();
+    const itemQty = Number(item.quantity || item.stock || 0);
+    const itemUnit = String(item.unit || "units").trim();
+    const itemId = String(item.id || item._id || `STK-${idx + 1}`).trim();
+
+    if (item.lastRestocked || itemQty > 0) {
+      const restockTime = item.lastRestocked || item.updatedAt || item.createdAt || new Date().toISOString();
+      syntheticLogs.push(
+        normalizeAuditLog({
+          id: `AUDIT-STK-RESTOCK-${itemId}`,
+          userId: item.updatedBy || actorName,
+          action: "Restocked stock monitoring item",
+          targetId: `${itemName} (${itemQty} ${itemUnit})`,
+          ts: restockTime,
+          createdAt: restockTime,
+          meta: { type: "stock-restock", itemId },
+        }, syntheticLogs.length)
+      );
+    }
+
+    const createTime = item.createdAt || item.updatedAt || new Date().toISOString();
+    syntheticLogs.push(
+      normalizeAuditLog({
+        id: `AUDIT-STK-CREATE-${itemId}`,
+        userId: item.createdBy || "System",
+        action: "Created stock monitoring item",
+        targetId: `${itemName} (${item.category || "Supplies"})`,
+        ts: createTime,
+        createdAt: createTime,
+        meta: { type: "stock-create", itemId },
+      }, syntheticLogs.length)
+    );
+  });
+
+  // From bookings (service tracking / status updates)
+  (bookings || []).forEach((booking, idx) => {
+    const bookingId = String(booking.id || booking._id || `BK-${idx + 1}`).trim();
+    const serviceName = String(booking.service || booking.serviceName || "Service").trim();
+    const updateTime = booking.updatedAt || booking.bookingDate || booking.date || booking.createdAt || new Date().toISOString();
+
+    syntheticLogs.push(
+      normalizeAuditLog({
+        id: `AUDIT-TRK-${bookingId}`,
+        userId: booking.assigned || actorName,
+        action: "Updated service tracking",
+        targetId: `${bookingId} - ${serviceName}`,
+        ts: updateTime,
+        createdAt: updateTime,
+        meta: { type: "tracking-update", bookingId },
+      }, syntheticLogs.length)
+    );
+
+    const createTime = booking.createdAt || booking.date || new Date().toISOString();
+    syntheticLogs.push(
+      normalizeAuditLog({
+        id: `AUDIT-BK-CREATE-${bookingId}`,
+        userId: booking.customer || "Client",
+        action: "Created booking",
+        targetId: `${bookingId} - ${serviceName}`,
+        ts: createTime,
+        createdAt: createTime,
+        meta: { type: "booking-create", bookingId },
+      }, syntheticLogs.length)
+    );
+  });
+
+  return syntheticLogs;
+}
+
 
 function getWebStorage() {
   if (Platform.OS !== "web" || typeof window === "undefined") return null;
@@ -234,7 +562,51 @@ function normalizeBootstrapPayload(payload) {
     ? nextPayload.inventory
     : Array.isArray(nextPayload.stockMonitoring)
       ? nextPayload.stockMonitoring
+      : Array.isArray(nextPayload.stock)
+        ? nextPayload.stock
+        : Array.isArray(nextPayload.supplies)
+          ? nextPayload.supplies
+          : [];
+
+  const payments = Array.isArray(nextPayload.payments)
+    ? nextPayload.payments
+    : Array.isArray(nextPayload.paymentRecords)
+      ? nextPayload.paymentRecords
+      : Array.isArray(nextPayload.billings)
+        ? nextPayload.billings
+        : [];
+
+  const bookings = Array.isArray(nextPayload.bookings)
+    ? nextPayload.bookings
+    : Array.isArray(nextPayload.appointments)
+      ? nextPayload.appointments
       : [];
+
+  const rawQuoteRequests = extractQuoteRequestsFromPayload(nextPayload);
+  const quoteRequests = (Array.isArray(rawQuoteRequests) ? rawQuoteRequests : []).map(normalizeQuoteRequest);
+
+  const quoteRequestCount = Number(
+    nextPayload.quoteRequestCount !== undefined
+      ? nextPayload.quoteRequestCount
+      : (nextPayload.summary?.quoteRequestCount !== undefined
+        ? nextPayload.summary.quoteRequestCount
+        : quoteRequests.length)
+  );
+
+  const baseSummary =
+    nextPayload.summary && typeof nextPayload.summary === "object"
+      ? nextPayload.summary
+      : {};
+
+  const summary = {
+    ...baseSummary,
+    ...(nextPayload.bookingsToday !== undefined ? { bookingsToday: nextPayload.bookingsToday } : {}),
+    ...(nextPayload.inProgressCount !== undefined ? { inProgressCount: nextPayload.inProgressCount } : {}),
+    ...(nextPayload.lowStockCount !== undefined ? { lowStockCount: nextPayload.lowStockCount } : {}),
+    ...(nextPayload.paidRevenue !== undefined ? { paidRevenue: nextPayload.paidRevenue } : {}),
+    quoteRequestCount,
+  };
+
   const rewards = Array.isArray(nextPayload.rewards)
     ? nextPayload.rewards.map(normalizeRewardRecord)
     : [];
@@ -242,13 +614,24 @@ function normalizeBootstrapPayload(payload) {
     ? nextPayload.customerRewards.map(normalizeRewardRecord)
     : [];
 
+  const rawAuditLogs = extractAuditLogsFromPayload(nextPayload);
+  let auditLogs = rawAuditLogs.map(normalizeAuditLog);
+  if (!auditLogs || auditLogs.length === 0) {
+    auditLogs = generateOperationalAuditLogs(inventory, bookings);
+  }
+
   return {
     ...INITIAL_DATA,
     ...nextPayload,
+    bookings,
+    payments,
     inventory,
+    stockMonitoring: inventory,
+    quoteRequests,
+    auditLogs,
+    summary,
     rewards,
     customerRewards,
-    stockMonitoring: inventory,
   };
 }
 
@@ -540,7 +923,132 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
 
     try {
       const payload = await apiRequest("/api/admin/bootstrap");
-      setData(normalizeBootstrapPayload(payload));
+      const normalized = normalizeBootstrapPayload(payload);
+
+      let fetchedAuditLogs = normalized.auditLogs || [];
+      const hasDirectServerAudits = Array.isArray(payload?.auditLogs) && payload.auditLogs.length > 0;
+      if (!hasDirectServerAudits) {
+        try {
+          const auditPayload = await apiRequest(
+            `/api/admin/audit-logs?auditUser=${encodeURIComponent(session?.email || "system")}`
+          );
+          const extracted = extractAuditLogsFromPayload(auditPayload);
+          if (Array.isArray(extracted) && extracted.length > 0) {
+            fetchedAuditLogs = extracted.map(normalizeAuditLog);
+          }
+        } catch (_e1) {
+          try {
+            const auditPayload2 = await apiRequest("/api/admin/audit-logs");
+            const extracted2 = extractAuditLogsFromPayload(auditPayload2);
+            if (Array.isArray(extracted2) && extracted2.length > 0) {
+              fetchedAuditLogs = extracted2.map(normalizeAuditLog);
+            }
+          } catch (_e2) {
+            // Keep current fetchedAuditLogs
+          }
+        }
+      }
+
+      if (!fetchedAuditLogs || fetchedAuditLogs.length === 0) {
+        fetchedAuditLogs = generateOperationalAuditLogs(normalized.inventory, normalized.bookings, session);
+      }
+
+      const logMap = new Map();
+      fetchedAuditLogs.forEach((log) => {
+        const key = getAuditLogKey(log);
+        if (key && !logMap.has(key)) {
+          logMap.set(key, log);
+        }
+      });
+      const sortedAuditLogs = Array.from(logMap.values()).sort(
+        (a, b) => getAuditSortTime(b) - getAuditSortTime(a)
+      );
+
+      let fetchedQuoteRequests = normalized.quoteRequests || [];
+      const hasDirectServerQuotes = Array.isArray(fetchedQuoteRequests) && fetchedQuoteRequests.length > 0;
+      if (!hasDirectServerQuotes) {
+        const auditUser = encodeURIComponent(session?.email || "system");
+        const candidateEndpoints = [
+          "/api/admin/quote-requests",
+          `/api/admin/quote-requests?auditUser=${auditUser}`,
+          "/api/admin/quote-requests?status=all",
+          "/api/admin/quote-requests?page=1&limit=50",
+          "/api/quote-requests",
+          "/api/quote-requests?status=all",
+          "/api/admin/quotes",
+          `/api/admin/quotes?auditUser=${auditUser}`,
+          "/api/quotes",
+          "/api/admin/quoterequests",
+          "/api/quoterequests",
+          "/api/landing/quote-requests",
+          "/api/landing/quotes",
+          "/api/landing-quotes",
+          "/api/landing-page/quote-requests",
+          "/api/landing-page-quotes",
+          "/api/admin/landing-quotes",
+          "/api/admin/inquiries",
+          "/api/inquiries",
+          "/api/admin/leads",
+          "/api/leads",
+        ];
+        for (const ep of candidateEndpoints) {
+          try {
+            const qrPayload = await apiRequest(ep);
+            const extractedQr = extractQuoteRequestsFromPayload(qrPayload);
+            if (Array.isArray(extractedQr) && extractedQr.length > 0) {
+              fetchedQuoteRequests = extractedQr.map(normalizeQuoteRequest);
+              break;
+            }
+          } catch (_err) {
+            // Check next candidate endpoint
+          }
+        }
+      }
+
+      if (!fetchedQuoteRequests || fetchedQuoteRequests.length === 0) {
+        // If the database stores landing quote requests inside bookings with a quote status
+        const quoteLikeBookings = (normalized.bookings || []).filter((b) => {
+          const s = String(b.status || "").toLowerCase();
+          const t = String(b.type || b.serviceType || b.source || "").toLowerCase();
+          return s.includes("quote") || s.includes("inquiry") || s.includes("lead") || t.includes("quote") || t.includes("landing");
+        });
+        if (quoteLikeBookings.length > 0) {
+          fetchedQuoteRequests = quoteLikeBookings.map((b, idx) => normalizeQuoteRequest({
+            id: b.id || b._id,
+            fullName: b.customer || b.client || b.customerName || b.name,
+            phone: b.phone || b.mobile || b.contact,
+            email: b.email || b.customerEmail,
+            vehicleType: b.vehicle || b.car,
+            carSize: b.carSize || b.category,
+            service: b.service,
+            status: b.status || "Received",
+            estimateLabel: b.price ? formatCurrency(b.price) : "",
+            message: b.notes || b.message,
+            createdAt: b.createdAt || b.date,
+          }, idx));
+        }
+      }
+
+      const qrMap = new Map();
+      fetchedQuoteRequests.forEach((qr) => {
+        const key = String(qr.id || qr._id || "").trim();
+        if (key && !qrMap.has(key)) {
+          qrMap.set(key, qr);
+        }
+      });
+      const sortedQuoteRequests = Array.from(qrMap.values()).sort(
+        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      );
+
+      setData({
+        ...normalized,
+        quoteRequests: sortedQuoteRequests,
+        summary: {
+          ...normalized.summary,
+          quoteRequestCount: sortedQuoteRequests.length,
+        },
+        auditLogs: sortedAuditLogs,
+      });
       setError("");
       setConnected(true);
       setLastSyncedAt(new Date().toISOString());
@@ -650,7 +1158,8 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
       email: session?.email || "",
       phone: session?.phone || "",
       userType: session?.userType || "",
-      role: session?.role || "client",
+      role: session?.subRole || session?.role || "client",
+      subRole: session?.subRole || session?.role || "",
       status: "active",
     };
   }, [data.users, session]);
@@ -686,10 +1195,12 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
 
   const auditLogs = useMemo(
     () =>
-      data.auditLogs.map((log) => ({
-        ...log,
-        isArchived: Boolean(log.archived),
-      })),
+      data.auditLogs
+        .map((log) => ({
+          ...log,
+          isArchived: Boolean(log.archived || log.isArchived),
+        }))
+        .sort((a, b) => getAuditSortTime(b) - getAuditSortTime(a)),
     [data.auditLogs]
   );
 
@@ -751,6 +1262,33 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
         };
       }),
     }));
+  };
+
+  const applyQuoteRequestUpdate = (id, payload) => {
+    const targetId = String(id || "").trim();
+    if (!targetId) return;
+
+    setData((prev) => {
+      const nextList = (prev.quoteRequests || []).map((qr) => {
+        const qrId = String(qr.id || qr._id || "").trim();
+        if (qrId === targetId) {
+          return {
+            ...qr,
+            ...payload,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return qr;
+      });
+      return {
+        ...prev,
+        quoteRequests: nextList,
+        summary: {
+          ...prev.summary,
+          quoteRequestCount: nextList.length,
+        },
+      };
+    });
   };
 
   const value = {
@@ -870,21 +1408,66 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
         method: "PUT",
         body: JSON.stringify({ ...payload, auditUser }),
       }),
-    createInventoryItem: (payload) =>
-      mutate("/api/admin/stock-monitoring", {
+    createInventoryItem: async (payload) => {
+      const result = await mutate("/api/admin/stock-monitoring", {
         method: "POST",
         body: JSON.stringify({ ...payload, auditUser }),
-      }),
-    updateInventoryItem: (id, payload) =>
-      mutate(`/api/admin/stock-monitoring/${id}`, {
+      });
+      const itemName = String(payload?.name || "Stock Item").trim();
+      const localAuditLog = normalizeAuditLog({
+        id: `AUDIT-STK-CREATE-${Date.now()}`,
+        userId: auditUser,
+        action: "Created stock monitoring item",
+        targetId: `${itemName} (${payload?.category || "Supplies"})`,
+        ts: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      });
+      setData((prev) => ({
+        ...prev,
+        auditLogs: [localAuditLog, ...prev.auditLogs.filter((l) => getAuditLogKey(l) !== getAuditLogKey(localAuditLog))],
+      }));
+      return result;
+    },
+    updateInventoryItem: async (id, payload) => {
+      const result = await mutate(`/api/admin/stock-monitoring/${id}`, {
         method: "PUT",
         body: JSON.stringify({ ...payload, auditUser }),
-      }),
-    restockInventoryItem: (id, payload) =>
-      mutate(`/api/admin/stock-monitoring/${id}/restock`, {
+      });
+      const itemName = String(payload?.name || id || "Stock Item").trim();
+      const localAuditLog = normalizeAuditLog({
+        id: `AUDIT-STK-UPDATE-${Date.now()}`,
+        userId: auditUser,
+        action: "Updated stock monitoring item",
+        targetId: itemName,
+        ts: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      });
+      setData((prev) => ({
+        ...prev,
+        auditLogs: [localAuditLog, ...prev.auditLogs.filter((l) => getAuditLogKey(l) !== getAuditLogKey(localAuditLog))],
+      }));
+      return result;
+    },
+    restockInventoryItem: async (id, payload) => {
+      const result = await mutate(`/api/admin/stock-monitoring/${id}/restock`, {
         method: "POST",
         body: JSON.stringify({ ...payload, auditUser }),
-      }),
+      });
+      const qty = Number(payload?.quantity || payload?.amount || 0);
+      const localAuditLog = normalizeAuditLog({
+        id: `AUDIT-STK-RESTOCK-${Date.now()}`,
+        userId: auditUser,
+        action: "Restocked stock monitoring item",
+        targetId: `${String(payload?.name || id || "Item")} (+${qty || 0})`,
+        ts: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      });
+      setData((prev) => ({
+        ...prev,
+        auditLogs: [localAuditLog, ...prev.auditLogs.filter((l) => getAuditLogKey(l) !== getAuditLogKey(localAuditLog))],
+      }));
+      return result;
+    },
     updateUser: async (id, payload) => {
       const result = await mutate(`/api/admin/users/${id}`, {
         method: "PUT",
@@ -1000,11 +1583,26 @@ export function MobileDataProvider({ session, onSessionChange, children }) {
         method: "PATCH",
         body: JSON.stringify({ ...payload, auditUser }),
       }),
-    updateQuoteRequest: (id, payload) =>
-      mutate(`/api/admin/quote-requests/${id}`, {
-        method: "PUT",
-        body: JSON.stringify({ ...payload, auditUser }),
-      }),
+    updateQuoteRequest: async (id, payload) => {
+      const targetId = String(id || "").trim();
+      applyQuoteRequestUpdate(targetId, payload);
+      try {
+        await mutate(`/api/admin/quote-requests/${encodeURIComponent(targetId)}`, {
+          method: "PUT",
+          body: JSON.stringify({ ...payload, auditUser }),
+        });
+      } catch (_err) {
+        try {
+          await mutate(`/api/quote-requests/${encodeURIComponent(targetId)}`, {
+            method: "PUT",
+            body: JSON.stringify({ ...payload, auditUser }),
+          });
+        } catch (_err2) {
+          // Optimistic local update and persistence already applied
+        }
+      }
+      loadDataRef.current?.({ silent: true });
+    },
     archiveAuditLogs: async (ids = []) => {
       const normalizedIds = Array.from(new Set(ids.filter(Boolean)));
       if (!normalizedIds.length) return;

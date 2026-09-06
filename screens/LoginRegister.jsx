@@ -150,15 +150,35 @@ const passStrong = (v) => {
   return r.min8 && r.upper && r.lower && r.special;
 };
 
+const ALL_STAFF_ROLE_STRINGS = new Set([
+  "staff",
+  "mechanic",
+  "inspector",
+  "coordinator",
+  "detailer",
+  "technician",
+  "employee",
+  "manager",
+  "senior staff",
+  "junior staff",
+  "general manager",
+  "sales manager",
+  "sales associate",
+  "inventory clerk",
+  "junior detailer",
+  "senior detailer",
+  "marketing",
+]);
+
 const normalizePermission = (userType, role) => {
   const normalizedUserType = String(userType || "").trim().toLowerCase();
   if (["admin", "staff", "client", "customer"].includes(normalizedUserType)) {
     return normalizedUserType === "customer" ? "client" : normalizedUserType;
   }
 
-  const normalizedRole = String(role || "").trim().toLowerCase();
+  const normalizedRole = String(role || "").trim().toLowerCase().replace(/\s+/g, " ");
   if (["admin", "owner", "co-owner"].includes(normalizedRole)) return "admin";
-  if (["staff", "mechanic", "inspector", "coordinator"].includes(normalizedRole)) return "staff";
+  if (ALL_STAFF_ROLE_STRINGS.has(normalizedRole)) return "staff";
   return "client";
 };
 

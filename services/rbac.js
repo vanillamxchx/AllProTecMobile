@@ -1,4 +1,4 @@
-import { isValidStaffRole, normalizeStaffRole } from "./staffRoles";
+import { isValidStaffRole, normalizeStaffRole } from "./staffRoles.js";
 
 export const MODULE_KEYS = {
   dashboard: "module.dashboard",
@@ -72,7 +72,6 @@ const ROLE_MODULES = {
   "general manager": [
     MODULE_KEYS.dashboard,
     MODULE_KEYS.analytics,
-    MODULE_KEYS.auditLogs,
     MODULE_KEYS.bookings,
     MODULE_KEYS.services,
     MODULE_KEYS.serviceTracking,
@@ -81,7 +80,6 @@ const ROLE_MODULES = {
     MODULE_KEYS.financialTracker,
     MODULE_KEYS.engagement,
     MODULE_KEYS.userManagement,
-    MODULE_KEYS.detailerManagement,
     MODULE_KEYS.profile,
   ],
   "sales manager": [
@@ -137,8 +135,6 @@ const ROLE_ACTIONS = {
     ACTION_KEYS.bookingView,
     ACTION_KEYS.bookingCreate,
     ACTION_KEYS.bookingUpdate,
-    ACTION_KEYS.bookingReassignDetailer,
-    ACTION_KEYS.detailerReassign,
     ACTION_KEYS.bookingUpdateStatus,
     ACTION_KEYS.trackingView,
     ACTION_KEYS.trackingUpdateIssueNotes,
@@ -156,7 +152,6 @@ const ROLE_ACTIONS = {
     ACTION_KEYS.commissionVoid,
     ACTION_KEYS.commissionPrint,
     ACTION_KEYS.commissionExport,
-    ACTION_KEYS.auditViewOperational,
     ACTION_KEYS.servicesManage,
   ],
   "sales manager": [
@@ -225,7 +220,15 @@ export function normalizeUserType(user) {
 }
 
 export function normalizeRole(user) {
-  return normalizeStaffRole(user?.role || "");
+  const primaryRole = normalizeStaffRole(user?.role || "");
+  if (primaryRole && primaryRole !== "staff" && primaryRole !== "customer" && primaryRole !== "client") {
+    return primaryRole;
+  }
+  const sub = normalizeStaffRole(user?.subRole || user?.jobRole);
+  if (sub) {
+    return sub;
+  }
+  return primaryRole;
 }
 
 export function isAdmin(user) {
@@ -258,7 +261,11 @@ export function canPerformAction(user, actionKey) {
 
 export function getAllowedModules(user) {
   if (isAdmin(user)) return Object.values(MODULE_KEYS);
-  return ROLE_MODULES[getEffectiveRole(user)] || [];
+  if (isStaff(user)) {
+    const modules = new Set(ROLE_MODULES[getEffectiveRole(user)] || []);
+    return Array.from(modules);
+  }
+  return [];
 }
 
 export function getDefaultModule(user) {

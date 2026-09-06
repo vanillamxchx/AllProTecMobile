@@ -7,6 +7,7 @@ import {
   ScrollView,
   Image,
   SafeAreaView,
+  RefreshControl,
 } from "react-native";
 
 import styles from "../../styles/css/staff/staffPaymentsStyles";
@@ -18,8 +19,35 @@ import MobileFilterModal from "../../components/common/MobileFilterModal.jsx";
 const ICON_SEARCH = require("../../styles/icons/search.png");
 const ICON_FILTER = require("../../styles/icons/filter.png");
 
-export default function StaffPayments() {
-  const { scopedPayments } = useMobileData();
+function getPaymentSortTime(payment = {}) {
+  const candidates = [
+    payment.updatedAt,
+    payment.createdAt,
+    payment.date,
+    payment.paymentDate,
+    payment.paidAt,
+    payment.proofSubmittedAt,
+    payment.downPaymentPaidAt,
+  ];
+
+  for (const value of candidates) {
+    const time = new Date(value).getTime();
+    if (!Number.isNaN(time)) return time;
+  }
+
+  return 0;
+}
+
+export default function StaffPayments({ onBack }) {
+  const {
+    payments,
+    scopedPayments,
+    getPaymentStageLabel,
+    statusMeta,
+    reload,
+    loading,
+  } = useMobileData();
+
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
@@ -29,28 +57,63 @@ export default function StaffPayments() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [filters, setFilters] = useState({ status: "All", method: "All" });
 
-  const statusOptions = useMemo(
-    () => Array.from(new Set(scopedPayments.map((payment) => String(payment.status || "").trim()).filter(Boolean))),
-    [scopedPayments]
-  );
-  const methodOptions = useMemo(
-    () => Array.from(new Set(scopedPayments.map((payment) => String(payment.method || "").trim()).filter(Boolean))),
-    [scopedPayments]
-  );
+  const paymentList = useMemo(() => {
+    return payments?.length ? payments : (scopedPayments || []);
+  }, [payments, scopedPayments]);
+
+  const statusOptions = useMemo(() => {
+    const statuses = new Set();
+    paymentList.forEach((p) => {
+      const stage = typeof getPaymentStageLabel === "function" ? getPaymentStageLabel(p) : "";
+      if (stage) statuses.add(stage);
+      if (p.status) statuses.add(String(p.status).trim());
+    });
+    return Array.from(statuses).filter(Boolean);
+  }, [paymentList, getPaymentStageLabel]);
+
+  const methodOptions = useMemo(() => {
+    const methods = new Set();
+    paymentList.forEach((p) => {
+      if (p.method) methods.add(String(p.method).trim());
+      if (p.downPaymentMethod) methods.add(String(p.downPaymentMethod).trim());
+      if (p.finalPaymentMethod) methods.add(String(p.finalPaymentMethod).trim());
+    });
+    return Array.from(methods).filter(Boolean);
+  }, [paymentList]);
 
   const filtered = useMemo(() => {
     const q = String(query || "").trim().toLowerCase();
-    return scopedPayments.filter((payment) => {
-      const matchesQuery =
-        !q ||
-        `${payment.bookingId} ${payment.customer} ${payment.status} ${payment.service} ${payment.method}`
-          .toLowerCase()
-          .includes(q);
-      const matchesStatus = filters.status === "All" || String(payment.status || "").trim() === filters.status;
-      const matchesMethod = filters.method === "All" || String(payment.method || "").trim() === filters.method;
-      return matchesQuery && matchesStatus && matchesMethod;
-    });
-  }, [scopedPayments, query, filters]);
+    return paymentList
+      .filter((payment) => {
+        const stage = typeof getPaymentStageLabel === "function" ? getPaymentStageLabel(payment) : "";
+        const rawStatus = String(payment.status || "").trim();
+        const methods = [
+          payment.method,
+          payment.downPaymentMethod,
+          payment.finalPaymentMethod,
+        ]
+          .filter(Boolean)
+          .map((m) => String(m).trim().toLowerCase());
+
+        const matchesQuery =
+          !q ||
+          `${payment.bookingId || ""} ${payment.id || ""} ${payment.customer || ""} ${stage} ${rawStatus} ${payment.service || ""} ${methods.join(" ")}`
+            .toLowerCase()
+            .includes(q);
+
+        const matchesStatus =
+          filters.status === "All" ||
+          stage.toLowerCase() === filters.status.toLowerCase() ||
+          rawStatus.toLowerCase() === filters.status.toLowerCase();
+
+        const matchesMethod =
+          filters.method === "All" ||
+          methods.includes(filters.method.toLowerCase());
+
+        return matchesQuery && matchesStatus && matchesMethod;
+      })
+      .sort((left, right) => getPaymentSortTime(right) - getPaymentSortTime(left));
+  }, [paymentList, query, filters, getPaymentStageLabel]);
 
   const pageSize = 4;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -60,11 +123,48 @@ export default function StaffPayments() {
     return filtered.slice(start, start + pageSize);
   }, [filtered, safePage]);
 
+  const getStatusPillStyle = (metaCls) => {
+    if (metaCls === "paid") return styles.stPaid;
+    if (metaCls === "review") return styles.stReview;
+    if (metaCls === "rejected") return styles.stRejected;
+    return styles.stPending;
+  };
+
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <View style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.body}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={Boolean(loading)}
+              onRefresh={() => reload?.({ silent: false })}
+              tintColor="#111827"
+              colors={["#111827"]}
+            />
+          }
+        >
           <View style={styles.topRow}>
+            {onBack ? (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={onBack}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 12,
+                  backgroundColor: "#FFF",
+                  borderWidth: 1,
+                  borderColor: "#E5E7EB",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginRight: 6,
+                }}
+              >
+                <Text style={{ fontSize: 16, fontWeight: "900", color: "#111827" }}>{"<"}</Text>
+              </TouchableOpacity>
+            ) : null}
             <View style={{ flex: 1 }}>
               <Text style={styles.h1}>Payments</Text>
               <Text style={styles.h2}>Payments and billing records.</Text>
@@ -91,55 +191,79 @@ export default function StaffPayments() {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.tableCard}>
-            <View style={styles.tableHead}>
-              <Text style={[styles.th, styles.colId]}>Booking ID</Text>
-              <Text style={[styles.th, styles.colCustomer]}>Customer</Text>
-              <Text style={[styles.th, styles.colStatus]}>Status</Text>
-              <Text style={[styles.th, styles.colAction]}>Action</Text>
+          {filtered.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>No payments found</Text>
+              <Text style={styles.emptySub}>
+                {query || filters.status !== "All" || filters.method !== "All"
+                  ? "Try adjusting your search or filters."
+                  : "Payment records will appear here."}
+              </Text>
             </View>
+          ) : (
+            <View style={styles.tableCard}>
+              <View style={styles.tableHead}>
+                <Text style={[styles.th, styles.colId]}>Booking ID</Text>
+                <Text style={[styles.th, styles.colCustomer]}>Customer</Text>
+                <Text style={[styles.th, styles.colStatus]}>Status</Text>
+                <Text style={[styles.th, styles.colAction]}>Action</Text>
+              </View>
 
-            {paged.map((payment, idx) => {
-              const paid = String(payment.status || "").toLowerCase().includes("paid");
+              {paged.map((payment, idx) => {
+                const stage =
+                  typeof getPaymentStageLabel === "function"
+                    ? getPaymentStageLabel(payment)
+                    : payment.status || "Pending";
+                const meta =
+                  typeof statusMeta === "function"
+                    ? statusMeta(stage)
+                    : { cls: "pending", label: stage };
 
-              return (
-                <View key={payment.id} style={[styles.tr, idx === paged.length - 1 && styles.trLast]}>
-                  <Text style={[styles.td, styles.colId]}>{payment.bookingId || payment.id}</Text>
-                  <Text style={[styles.td, styles.colCustomer]}>{payment.customer}</Text>
+                return (
+                  <View key={payment.id || payment._id || idx} style={[styles.tr, idx === paged.length - 1 && styles.trLast]}>
+                    <Text style={[styles.td, styles.colId]}>{payment.bookingId || payment.id}</Text>
+                    <Text style={[styles.td, styles.colCustomer]}>{payment.customer || "Customer"}</Text>
 
-                  <View style={[styles.colStatus, styles.statusCell]}>
-                    <View style={[styles.statusPill, paid ? styles.stPaid : styles.stPending]}>
-                      <Text style={styles.statusTxt}>{payment.status}</Text>
+                    <View style={[styles.colStatus, styles.statusCell]}>
+                      <View style={[styles.statusPill, getStatusPillStyle(meta.cls)]}>
+                        <Text style={styles.statusTxt}>{meta.label || stage}</Text>
+                      </View>
+                    </View>
+
+                    <View style={[styles.colAction, styles.actionCell]}>
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        style={styles.viewBtn}
+                        onPress={() => {
+                          setSelected({
+                            ...payment,
+                            id: payment.bookingId || payment.id,
+                          });
+                          setModalOpen(true);
+                        }}
+                      >
+                        <Text style={styles.viewTxt}>View Details</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
-
-                  <View style={[styles.colAction, styles.actionCell]}>
-                    <TouchableOpacity activeOpacity={0.85} style={styles.viewBtn} onPress={() => {
-                      setSelected({
-                        ...payment,
-                        id: payment.bookingId || payment.id,
-                      });
-                      setModalOpen(true);
-                    }}>
-                      <Text style={styles.viewTxt}>View Details</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-
-          <View style={styles.pager}>
-            <TouchableOpacity activeOpacity={0.85} style={styles.pageBtn} onPress={() => setPage((p) => Math.max(1, p - 1))}>
-              <Text style={styles.pageTxt}>{"<"}</Text>
-            </TouchableOpacity>
-            <View style={styles.pageNum}>
-              <Text style={styles.pageNumTxt}>{safePage}</Text>
+                );
+              })}
             </View>
-            <TouchableOpacity activeOpacity={0.85} style={styles.pageBtn} onPress={() => setPage((p) => Math.min(totalPages, p + 1))}>
-              <Text style={styles.pageTxt}>{">"}</Text>
-            </TouchableOpacity>
-          </View>
+          )}
+
+          {filtered.length > pageSize ? (
+            <View style={styles.pager}>
+              <TouchableOpacity activeOpacity={0.85} style={styles.pageBtn} onPress={() => setPage((p) => Math.max(1, p - 1))}>
+                <Text style={styles.pageTxt}>{"<"}</Text>
+              </TouchableOpacity>
+              <View style={styles.pageNum}>
+                <Text style={styles.pageNumTxt}>{safePage}</Text>
+              </View>
+              <TouchableOpacity activeOpacity={0.85} style={styles.pageBtn} onPress={() => setPage((p) => Math.min(totalPages, p + 1))}>
+                <Text style={styles.pageTxt}>{">"}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
         </ScrollView>
 
         <PaymentModal

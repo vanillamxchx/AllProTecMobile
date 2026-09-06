@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Image } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, RefreshControl } from "react-native";
 
 import styles from "../../styles/css/admin/adminAuditLogsStyles.js";
 import { useMobileData } from "../../context/MobileDataContext.jsx";
@@ -10,33 +10,69 @@ const ICON_SEARCH = require("../../styles/icons/search.png");
 const ICON_FILTER = require("../../styles/icons/filter.png");
 
 function getAuditLogKey(log) {
-  return String(log?.id || log?._id || "").trim();
+  return String(log?.id || log?._id || log?.auditId || "").trim();
 }
 
-export default function AdminAuditLogs() {
-  const { auditLogs } = useMobileData();
+function getAuditSortTime(log = {}) {
+  const candidates = [
+    log.createdAt,
+    log.timestamp,
+    log.ts,
+    log.updatedAt,
+    log.date,
+  ];
+  for (const c of candidates) {
+    if (c) {
+      const t = new Date(c).getTime();
+      if (!Number.isNaN(t)) return t;
+    }
+  }
+  return 0;
+}
+
+export default function AdminAuditLogs({ onBack }) {
+  const { auditLogs = [], reload, loading } = useMobileData();
   const [query, setQuery] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [filters, setFilters] = useState({ userId: "All", action: "All" });
   const [page, setPage] = useState(1);
 
   const userOptions = useMemo(
-    () => Array.from(new Set(auditLogs.map((log) => String(log.userId || "").trim()).filter(Boolean))),
+    () => Array.from(new Set(auditLogs.map((log) => String(log.userId || log.user || "").trim()).filter(Boolean))),
     [auditLogs]
   );
   const actionOptions = useMemo(
-    () => Array.from(new Set(auditLogs.map((log) => String(log.action || "").trim()).filter(Boolean))),
+    () => Array.from(new Set(auditLogs.map((log) => String(log.action || log.title || "").trim()).filter(Boolean))),
     [auditLogs]
   );
 
   const filtered = useMemo(() => {
     const q = String(query || "").trim().toLowerCase();
-    return auditLogs.filter((log) => {
-      const matchesQuery = !q || `${log.id} ${log.userId} ${log.action} ${log.ts}`.toLowerCase().includes(q);
-      const matchesUser = filters.userId === "All" || String(log.userId || "").trim() === filters.userId;
-      const matchesAction = filters.action === "All" || String(log.action || "").trim() === filters.action;
-      return matchesQuery && matchesUser && matchesAction;
-    });
+    return auditLogs
+      .filter((log) => {
+        const idStr = String(log.id || log._id || "").toLowerCase();
+        const userStr = String(log.userId || log.user || "").toLowerCase();
+        const actionStr = String(log.action || log.title || "").toLowerCase();
+        const targetStr = String(log.targetId || log.target || "").toLowerCase();
+        const tsStr = String(log.ts || log.timestamp || "").toLowerCase();
+
+        const matchesQuery =
+          !q ||
+          idStr.includes(q) ||
+          userStr.includes(q) ||
+          actionStr.includes(q) ||
+          targetStr.includes(q) ||
+          tsStr.includes(q);
+
+        const currentUserId = String(log.userId || log.user || "").trim();
+        const matchesUser = filters.userId === "All" || currentUserId === filters.userId;
+
+        const currentAction = String(log.action || log.title || "").trim();
+        const matchesAction = filters.action === "All" || currentAction === filters.action;
+
+        return matchesQuery && matchesUser && matchesAction;
+      })
+      .sort((a, b) => getAuditSortTime(b) - getAuditSortTime(a));
   }, [auditLogs, filters, query]);
 
   const pageSize = 6;
@@ -46,17 +82,17 @@ export default function AdminAuditLogs() {
 
   const exportPdf = () =>
     exportTabularPdf({
-      title: "Admin Audit Logs Report",
+      title: "Audit Logs Report",
       subtitle: "Filtered audit trail exported in tabular format.",
       sections: [
         {
           columns: ["Audit ID", "User ID", "Action", "Target ID", "Timestamp"],
           rows: filtered.map((log) => [
-            log.id || "-",
-            log.userId || "-",
-            log.action || "-",
-            log.targetId || "-",
-            log.ts || "-",
+            getAuditLogKey(log) || "-",
+            log.userId || log.user || "-",
+            log.action || log.title || "-",
+            log.targetId || log.target || "-",
+            log.ts || log.timestamp || "-",
           ]),
           emptyMessage: "No audit logs found for the selected filters.",
         },
@@ -66,8 +102,38 @@ export default function AdminAuditLogs() {
   const totalLabel = `${filtered.length} log${filtered.length === 1 ? "" : "s"}`;
 
   return (
-    <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={styles.body}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={Boolean(loading)}
+          onRefresh={() => reload?.({ silent: false })}
+          tintColor="#111827"
+          colors={["#111827"]}
+        />
+      }
+    >
       <View style={styles.topRow}>
+        {onBack ? (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={onBack}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 12,
+              backgroundColor: "#FFF",
+              borderWidth: 1,
+              borderColor: "#E5E7EB",
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: 6,
+            }}
+          >
+            <Text style={{ fontSize: 16, fontWeight: "700", color: "#374151" }}>←</Text>
+          </TouchableOpacity>
+        ) : null}
         <View style={{ flex: 1 }}>
           <Text style={styles.h1}>Audit Logs</Text>
           <Text style={styles.h2}>Track actions for accountability.</Text>
@@ -110,10 +176,10 @@ export default function AdminAuditLogs() {
               </View>
 
               <View style={styles.logMetaGrid}>
-                <LogField label="User" value={log.userId} />
-                <LogField label="Action" value={log.action} />
-                <LogField label="Target" value={log.targetId} />
-                <LogField label="Timestamp" value={log.ts} />
+                <LogField label="User" value={log.userId || log.user || "-"} />
+                <LogField label="Action" value={log.action || log.title || "-"} />
+                <LogField label="Target" value={log.targetId || log.target || "-"} />
+                <LogField label="Timestamp" value={log.ts || log.timestamp || "-"} />
               </View>
             </View>
           ))

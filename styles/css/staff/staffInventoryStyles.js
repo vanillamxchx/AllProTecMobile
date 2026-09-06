@@ -120,4 +120,26 @@ export default StyleSheet.create({
     justifyContent: "center",
   },
   pageNumTxt: { fontSize: 13, fontWeight: "950", color: "#111827" },
+  emptyCard: {
+    padding: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginTop: 10,
+  },
+  emptyTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#111827",
+  },
+  emptySub: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6B7280",
+    textAlign: "center",
+  },
 });
