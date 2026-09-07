@@ -303,6 +303,13 @@ function isPackageService(service) {
   return explicitPackageValues.includes(category) || explicitPackageValues.includes(rawType);
 }
 
+function getClientCategorySearchTerms(service) {
+  const isPackage = isPackageService(service);
+  const typeTerms = isPackage ? "Package Packages" : "Basic Service Basic Services Basic";
+  const rawCategory = String(service?.category || "").trim();
+  return `${typeTerms} ${rawCategory}`.trim();
+}
+
 function matchesPriceFilter(service, activePriceFilter) {
   if (activePriceFilter === "all") return true;
   if (!Number.isFinite(service.priceValue)) return false;
@@ -330,11 +337,12 @@ export default function ClientServices(props) {
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
     return services.filter((service) => {
+      const categoryTerms = getClientCategorySearchTerms(service);
       const matchesQuery =
         !normalizedQuery ||
         service.name.toLowerCase().includes(normalizedQuery) ||
         service.description.toLowerCase().includes(normalizedQuery) ||
-        String(service.category || "").toLowerCase().includes(normalizedQuery);
+        categoryTerms.toLowerCase().includes(normalizedQuery);
 
       const isPackage = isPackageService(service);
       const matchesType =
@@ -397,6 +405,14 @@ export default function ClientServices(props) {
             <Text style={styles.filterButtonText}>=</Text>
           </TouchableOpacity>
         </View>
+
+        {Boolean(searchQuery.trim()) && filteredServices.length === 0 && (
+          <View style={{ marginTop: -4, marginBottom: 4, paddingHorizontal: 4 }}>
+            <Text style={{ fontSize: 13, fontWeight: "700", color: "#DC2626" }}>
+              No services match "{searchQuery.trim()}". Try searching by name, description, or category (Basic Services or Packages).
+            </Text>
+          </View>
+        )}
 
         {showFilters ? (
           <View style={styles.filterPanel}>
@@ -462,7 +478,9 @@ export default function ClientServices(props) {
             ) : (
               <View style={styles.emptyCard}>
                 <Text style={styles.emptyText}>
-                  No basic services matched your search or filters.
+                  {searchQuery.trim()
+                    ? "No basic services match your search."
+                    : "No basic services matched your search or filters."}
                 </Text>
               </View>
             )}
@@ -478,7 +496,9 @@ export default function ClientServices(props) {
             ) : (
               <View style={styles.emptyCard}>
                 <Text style={styles.emptyText}>
-                  No packages matched your search or filters.
+                  {searchQuery.trim()
+                    ? "No packages match your search."
+                    : "No packages matched your search or filters."}
                 </Text>
               </View>
             )}
@@ -487,7 +507,9 @@ export default function ClientServices(props) {
       ) : (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyText}>
-            No services matched your search or filters.
+            {searchQuery.trim()
+              ? `No services match "${searchQuery.trim()}". Try searching by name, description, or category (Basic Services or Packages).`
+              : "No services matched your search or filters."}
           </Text>
         </View>
       )}

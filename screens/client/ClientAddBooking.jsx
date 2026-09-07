@@ -170,7 +170,7 @@ export default function ClientAddBooking({ onBack, onConfirm }) {
 
   const errors = useMemo(() => {
     const next = {};
-    if (!selectedDate) next.date = "Please select a booking date.";
+    if (!selectedDate) next.date = "Date is required. Please select a booking date.";
     else if (toKey(selectedDate) < todayKey) next.date = "Please choose today or a future date.";
     if (!String(form.vehicle || "").trim()) next.vehicle = "Vehicle model is required.";
     if (!String(form.plate || "").trim()) next.plate = "Plate number is required.";
@@ -466,7 +466,17 @@ export default function ClientAddBooking({ onBack, onConfirm }) {
             })}
           </View>
 
-          {showErr("date") && <Text style={styles.errTxt}>{errors.date}</Text>}
+          {!selectedDate ? (
+            <Text style={[styles.errTxt, { marginTop: 10 }]}>
+              Date is required. Please select a booking date.
+            </Text>
+          ) : showErr("date") ? (
+            <Text style={[styles.errTxt, { marginTop: 10 }]}>{errors.date}</Text>
+          ) : (
+            <Text style={{ marginTop: 10, fontSize: 12, fontWeight: "800", color: "#16A34A" }}>
+              Selected Date: {monthLabel(selectedDate)} {selectedDate.getDate()}, {selectedDate.getFullYear()}
+            </Text>
+          )}
         </View>
 
         <View style={styles.totalRow}>

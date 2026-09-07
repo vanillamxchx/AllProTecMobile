@@ -43,7 +43,7 @@ export default function AdminUsersOverview() {
     const q = String(query || "").trim().toLowerCase();
     return adminAndStaffUsers.filter((user) => {
       const matchesQuery =
-        !q || `${user.name} ${user.userType} ${user.role} ${user.email} ${user.status}`.toLowerCase().includes(q);
+        !q || `${user.name} ${user.userType} ${toDisplayUserType(user.userType)} ${user.role} ${user.email} ${user.status}`.toLowerCase().includes(q);
       const matchesRole = filters.role === "All" || String(user.role || "").trim() === filters.role;
       const matchesStatus = filters.status === "All" || String(user.status || "").trim() === filters.status;
       return matchesQuery && matchesRole && matchesStatus;
@@ -109,6 +109,14 @@ export default function AdminUsersOverview() {
         </TouchableOpacity>
       </View>
 
+      {Boolean(query.trim()) && filtered.length === 0 && (
+        <View style={{ marginTop: -4, marginBottom: 8, paddingHorizontal: 4 }}>
+          <Text style={{ fontSize: 12, fontWeight: "700", color: "#DC2626" }}>
+            No users match "{query.trim()}". Please check your spelling or try another keyword.
+          </Text>
+        </View>
+      )}
+
       <View style={styles.tableCard}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tableScrollContent}>
           <View style={styles.tableInner}>
@@ -120,36 +128,48 @@ export default function AdminUsersOverview() {
               <Text style={[styles.th, styles.colStatus]}>Status</Text>
             </View>
 
-            {paged.map((user, idx) => (
-              <View key={`${user.id}-${idx}`} style={[styles.tr, idx === paged.length - 1 && styles.trLast]}>
-                <Text style={[styles.td, styles.colName]}>{user.name}</Text>
-                <Text style={[styles.td, styles.colUserType]}>{toDisplayUserType(user.userType)}</Text>
-
-                <View style={[styles.colRole, styles.roleCell]}>
-                  <View style={styles.rolePill}>
-                    <Text style={styles.roleTxt}>{user.role}</Text>
-                  </View>
-                </View>
-
-                <Text style={[styles.td, styles.colEmail]}>{user.email}</Text>
-                <Text style={[styles.td, styles.colStatus, statusStyle(user.status)]}>{user.status}</Text>
+            {paged.length === 0 ? (
+              <View style={{ paddingVertical: 24, paddingHorizontal: 16, alignItems: "center", justifyContent: "center" }}>
+                <Text style={{ color: "#6B7280", fontSize: 12, fontWeight: "700", textAlign: "center" }}>
+                  {query.trim()
+                    ? `No users match "${query.trim()}". Try searching by name, role, email, or user type.`
+                    : "No user accounts found for the selected filters."}
+                </Text>
               </View>
-            ))}
+            ) : (
+              paged.map((user, idx) => (
+                <View key={`${user.id}-${idx}`} style={[styles.tr, idx === paged.length - 1 && styles.trLast]}>
+                  <Text style={[styles.td, styles.colName]}>{user.name}</Text>
+                  <Text style={[styles.td, styles.colUserType]}>{toDisplayUserType(user.userType)}</Text>
+
+                  <View style={[styles.colRole, styles.roleCell]}>
+                    <View style={styles.rolePill}>
+                      <Text style={styles.roleTxt}>{user.role}</Text>
+                    </View>
+                  </View>
+
+                  <Text style={[styles.td, styles.colEmail]}>{user.email}</Text>
+                  <Text style={[styles.td, styles.colStatus, statusStyle(user.status)]}>{user.status}</Text>
+                </View>
+              ))
+            )}
           </View>
         </ScrollView>
       </View>
 
-      <View style={styles.pager}>
-        <TouchableOpacity activeOpacity={0.85} style={styles.pageBtn} onPress={() => setPage((p) => Math.max(1, p - 1))}>
-          <Text style={styles.pageTxt}>{"<"}</Text>
-        </TouchableOpacity>
-        <View style={styles.pageNum}>
-          <Text style={styles.pageNumTxt}>{safePage}</Text>
+      {filtered.length > pageSize && (
+        <View style={styles.pager}>
+          <TouchableOpacity activeOpacity={0.85} style={styles.pageBtn} onPress={() => setPage((p) => Math.max(1, p - 1))}>
+            <Text style={styles.pageTxt}>{"<"}</Text>
+          </TouchableOpacity>
+          <View style={styles.pageNum}>
+            <Text style={styles.pageNumTxt}>{safePage}</Text>
+          </View>
+          <TouchableOpacity activeOpacity={0.85} style={styles.pageBtn} onPress={() => setPage((p) => Math.min(totalPages, p + 1))}>
+            <Text style={styles.pageTxt}>{">"}</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity activeOpacity={0.85} style={styles.pageBtn} onPress={() => setPage((p) => Math.min(totalPages, p + 1))}>
-          <Text style={styles.pageTxt}>{">"}</Text>
-        </TouchableOpacity>
-      </View>
+      )}
 
       <MobileFilterModal
         open={filterOpen}

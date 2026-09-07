@@ -31,6 +31,13 @@ function getServiceType(service) {
     : "Basic Service";
 }
 
+function getCategorySearchTerms(service) {
+  const serviceType = getServiceType(service);
+  const typeTerms = serviceType === "Package" ? "Package Packages" : "Basic Service Basic Services Basic";
+  const rawCategory = String(service?.category || "").trim();
+  return `${typeTerms} ${rawCategory}`.trim();
+}
+
 function getArrivalTimesLabel(service) {
   return normalizeAllowedArrivalTimes(service?.allowedArrivalTimes, service?.mins)
     .map((time) => formatTimeLabel(time))
@@ -59,7 +66,8 @@ export default function AdminServices() {
   const filtered = useMemo(() => {
     const q = String(query || "").trim().toLowerCase();
     return services.filter((service) => {
-      const matchesQuery = !q || `${service.name} ${service.desc}`.toLowerCase().includes(q);
+      const categoryTerms = getCategorySearchTerms(service);
+      const matchesQuery = !q || `${service.name} ${service.desc} ${categoryTerms}`.toLowerCase().includes(q);
       const matchesCategory = filters.category === "All" || String(service.category || "").trim() === filters.category;
       const statusLabel = service.enabled ? "Enabled" : "Disabled";
       const matchesStatus = filters.status === "All" || statusLabel === filters.status;
@@ -124,8 +132,30 @@ export default function AdminServices() {
             </TouchableOpacity>
           </View>
 
-          <ServiceSection title="Basic Services" services={basicServices} styles={styles} onSelect={setSelected} onOpen={() => setModalOpen(true)} />
-          <ServiceSection title="Packages" services={packages} styles={styles} onSelect={setSelected} onOpen={() => setModalOpen(true)} emptyLabel="No packages found for the selected filters." />
+          {Boolean(query.trim()) && filtered.length === 0 && (
+            <View style={{ marginTop: -4, marginBottom: 8, paddingHorizontal: 4 }}>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#DC2626" }}>
+                No services match "{query.trim()}". Try searching by name, description, or category (Basic Services or Packages).
+              </Text>
+            </View>
+          )}
+
+          <ServiceSection
+            title="Basic Services"
+            services={basicServices}
+            styles={styles}
+            onSelect={setSelected}
+            onOpen={() => setModalOpen(true)}
+            emptyLabel={query.trim() ? "No basic services match your search." : "No basic services found for the selected filters."}
+          />
+          <ServiceSection
+            title="Packages"
+            services={packages}
+            styles={styles}
+            onSelect={setSelected}
+            onOpen={() => setModalOpen(true)}
+            emptyLabel={query.trim() ? "No packages match your search." : "No packages found for the selected filters."}
+          />
         </ScrollView>
 
         <ServiceModal visible={modalOpen} service={selected} onClose={() => setModalOpen(false)} />
