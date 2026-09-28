@@ -2,6 +2,7 @@ import React from "react";
 import { Image, Modal, Pressable, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { useMobileData } from "../../context/MobileDataContext.jsx";
 import { getReferenceValidationDisplay } from "../../services/paymentReferenceChecker";
+import { getDownPaymentProofImage, getFinalPaymentProofImage } from "../../services/paymentProofs";
 import styles from "../../styles/css/modals/paymentModalStyles";
 
 function formatDateTime(value) {
@@ -41,8 +42,8 @@ export default function PaymentModal({
     payment?.downPaymentRequired === false ? "Not Required" : "Pending"
   ) || "Pending";
   const finalPaymentStatus = normalizeStageStatus?.(payment?.finalPaymentStatus, payment?.status || "Pending") || "Pending";
-  const downPaymentProofImage = String(payment?.downPaymentProofUrl || payment?.proofImage || "").trim();
-  const finalPaymentProofImage = String(payment?.finalPaymentProofUrl || "").trim();
+  const downPaymentProofImage = getDownPaymentProofImage(payment);
+  const finalPaymentProofImage = getFinalPaymentProofImage(payment);
   const statusLower = status.toLowerCase();
 
   const pillStyle = statusLower.includes("paid")
@@ -84,39 +85,57 @@ export default function PaymentModal({
               <Text style={styles.sectionTitle}>Down Payment</Text>
               <Row label="Method:" value={payment?.downPaymentMethod || payment?.method} />
               <Row label="Reference:" value={payment?.downPaymentReference || payment?.reference} />
-              <Row label="Submitted:" value={payment?.downPaymentProofSubmittedAt ? formatDateTime(payment.downPaymentProofSubmittedAt) : "-"} />
-              <Row label="Receipt Time:" value={payment?.downPaymentTransactionTimestamp ? formatDateTime(payment.downPaymentTransactionTimestamp) : "-"} />
-              <Row
-                label="Validation:"
-                value={getReferenceValidationDisplay({
-                  method: payment?.downPaymentMethod || payment?.method,
-                  reference: payment?.downPaymentReference || payment?.reference,
-                  proofImage: downPaymentProofImage,
-                  status: payment?.downPaymentReferenceCheckStatus,
-                  checkedAt: payment?.downPaymentReferenceCheckedAt,
-                }).message}
-              />
+              {payment?.downPaymentProofSubmittedAt ? (
+                <Row label="Submitted:" value={formatDateTime(payment.downPaymentProofSubmittedAt)} />
+              ) : null}
+              {payment?.downPaymentTransactionTimestamp ? (
+                <Row label="Receipt Time:" value={formatDateTime(payment.downPaymentTransactionTimestamp)} />
+              ) : null}
               {downPaymentProofImage ? (
-                <Image source={{ uri: downPaymentProofImage }} style={styles.proofImage} resizeMode="cover" />
+                <Row
+                  label="Validation:"
+                  value={getReferenceValidationDisplay({
+                    method: payment?.downPaymentMethod || payment?.method,
+                    reference: payment?.downPaymentReference || payment?.reference,
+                    proofImage: downPaymentProofImage,
+                    status: payment?.downPaymentReferenceCheckStatus,
+                    checkedAt: payment?.downPaymentReferenceCheckedAt,
+                  }).message}
+                />
+              ) : null}
+              {downPaymentProofImage ? (
+                <View>
+                  <Text style={styles.proofLabel}>Down Payment Proof</Text>
+                  <Image source={{ uri: downPaymentProofImage }} style={styles.proofImage} resizeMode="cover" />
+                </View>
               ) : null}
 
               <Text style={styles.sectionTitle}>Balance Payment</Text>
               <Row label="Method:" value={payment?.finalPaymentMethod} />
               <Row label="Reference:" value={payment?.finalPaymentReference} />
-              <Row label="Submitted:" value={payment?.finalPaymentProofSubmittedAt ? formatDateTime(payment.finalPaymentProofSubmittedAt) : "-"} />
-              <Row label="Receipt Time:" value={payment?.finalPaymentTransactionTimestamp ? formatDateTime(payment.finalPaymentTransactionTimestamp) : "-"} />
-              <Row
-                label="Validation:"
-                value={getReferenceValidationDisplay({
-                  method: payment?.finalPaymentMethod,
-                  reference: payment?.finalPaymentReference,
-                  proofImage: finalPaymentProofImage,
-                  status: payment?.finalPaymentReferenceCheckStatus,
-                  checkedAt: payment?.finalPaymentReferenceCheckedAt,
-                }).message}
-              />
+              {payment?.finalPaymentProofSubmittedAt ? (
+                <Row label="Submitted:" value={formatDateTime(payment.finalPaymentProofSubmittedAt)} />
+              ) : null}
+              {payment?.finalPaymentTransactionTimestamp ? (
+                <Row label="Receipt Time:" value={formatDateTime(payment.finalPaymentTransactionTimestamp)} />
+              ) : null}
               {finalPaymentProofImage ? (
-                <Image source={{ uri: finalPaymentProofImage }} style={styles.proofImage} resizeMode="cover" />
+                <Row
+                  label="Validation:"
+                  value={getReferenceValidationDisplay({
+                    method: payment?.finalPaymentMethod,
+                    reference: payment?.finalPaymentReference,
+                    proofImage: finalPaymentProofImage,
+                    status: payment?.finalPaymentReferenceCheckStatus,
+                    checkedAt: payment?.finalPaymentReferenceCheckedAt,
+                  }).message}
+                />
+              ) : null}
+              {finalPaymentProofImage ? (
+                <View>
+                  <Text style={styles.proofLabel}>Balance Payment Proof</Text>
+                  <Image source={{ uri: finalPaymentProofImage }} style={styles.proofImage} resizeMode="cover" />
+                </View>
               ) : null}
 
               <View style={styles.row}>

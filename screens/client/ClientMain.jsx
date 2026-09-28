@@ -24,6 +24,7 @@ export default function ClientMain({ session, onLogout }) {
   const { notifications, unreadNotificationCount, markNotificationsRead, loading } = useMobileData();
   const [screen, setScreen] = useState("dashboard");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [newBookingForPayment, setNewBookingForPayment] = useState(null);
 
   const goTo = (key) => {
     const route = String(key || "").trim().toLowerCase();
@@ -73,7 +74,13 @@ export default function ClientMain({ session, onLogout }) {
 
         {/* ✅ MORE ROUTES */}
         {screen === "services" && <ClientServices goTo={goTo} />}
-        {screen === "payments" && <ClientPayments goTo={goTo} />}
+        {screen === "payments" && (
+          <ClientPayments
+            goTo={goTo}
+            autoOpenBooking={newBookingForPayment}
+            onAutoOpenHandled={() => setNewBookingForPayment(null)}
+          />
+        )}
         {screen === "engagement" && <ClientEngagement goTo={goTo} />}
 
         {screen === "profile" && (
@@ -86,7 +93,8 @@ export default function ClientMain({ session, onLogout }) {
             onBack={() => goTo("bookings")}
             onConfirm={(payload) => {
               console.log("BOOKING SUBMIT:", payload);
-              goTo("bookings");
+              setNewBookingForPayment(payload);
+              goTo("payments");
             }}
           />
         )}

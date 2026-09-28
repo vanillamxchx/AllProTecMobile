@@ -4,6 +4,7 @@ import styles from "../../styles/css/modals/serviceModalStyles";
 import { formatTimeLabel, normalizeAllowedArrivalTimes } from "../../services/bookingWorkflow";
 import { formatPriceRangeLabel } from "../../services/servicePricing";
 import { formatConsumableSizeLabel, normalizeConsumablesBySize } from "../../services/serviceConsumables";
+import { getServiceDescription } from "../../services/serviceDescription";
 
 export default function ServiceModal({ visible, service, onClose }) {
   if (!visible) return null;
@@ -27,7 +28,7 @@ export default function ServiceModal({ visible, service, onClose }) {
             <Text style={styles.title}>View Service Details</Text>
 
             <Row label="Service Name:" value={service?.name} />
-            <Row label="Description:" value={service?.desc || service?.description} multiline />
+            <Row label="Description:" value={getServiceDescription(service)} multiline />
             <Row label="Category:" value={service?.category} />
             <Row label="Price:" value={formatPriceRangeLabel(service)} />
             <Row label="Est:" value={`${Number(service?.mins || 0)} mins`} />

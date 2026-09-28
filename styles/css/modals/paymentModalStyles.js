@@ -98,6 +98,13 @@ export default StyleSheet.create({
     marginTop: 8,
     marginBottom: 8,
   },
+  proofLabel: {
+    marginTop: 8,
+    marginBottom: 6,
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#111827",
+  },
 
   actions: {
     marginTop: 14,

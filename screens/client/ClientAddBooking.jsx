@@ -55,6 +55,17 @@ function createEmptyForm(defaultService = "") {
   };
 }
 
+function isMotorCoatingService(service) {
+  const name = String(
+    typeof service === "string"
+      ? service
+      : service?.name || service?.title || service?.serviceName || ""
+  )
+    .trim()
+    .toLowerCase();
+  return name.includes("motor coating") || name.includes("motorcoating");
+}
+
 function SelectModal({ visible, title, options, value, onPick, onClose }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -154,6 +165,7 @@ export default function ClientAddBooking({ onBack, onConfirm }) {
     () => bookableServices.find((item) => item.name === form.service),
     [bookableServices, form.service]
   );
+  const isMotorCoating = isMotorCoatingService(selectedService || form.service);
 
   const timeOptions = useMemo(
     () => (selectedService ? getServiceArrivalTimeOptions(selectedService, form.time) : []),
@@ -164,8 +176,8 @@ export default function ClientAddBooking({ onBack, onConfirm }) {
     [timeOptions]
   );
   const total = useMemo(
-    () => getPriceForCarSize(selectedService, form.carSize),
-    [selectedService, form.carSize]
+    () => getPriceForCarSize(selectedService, isMotorCoating ? "" : form.carSize),
+    [selectedService, form.carSize, isMotorCoating]
   );
 
   const errors = useMemo(() => {
@@ -174,11 +186,13 @@ export default function ClientAddBooking({ onBack, onConfirm }) {
     else if (toKey(selectedDate) < todayKey) next.date = "Please choose today or a future date.";
     if (!String(form.vehicle || "").trim()) next.vehicle = "Vehicle model is required.";
     if (!String(form.plate || "").trim()) next.plate = "Plate number is required.";
-    if (!String(form.carSize || "").trim()) next.carSize = "Please select a car size.";
+    if (!isMotorCoating && !String(form.carSize || "").trim()) {
+      next.carSize = "Please select a car size.";
+    }
     if (!String(form.service || "").trim()) next.service = "Please select a service.";
     if (!String(form.time || "").trim()) next.time = "Please select a time slot.";
     return next;
-  }, [form, selectedDate, todayKey]);
+  }, [form, isMotorCoating, selectedDate, todayKey]);
 
   const canConfirm = Object.keys(errors).length === 0;
   const showErr = (key) => Boolean(touched[key] && errors[key]);
@@ -192,7 +206,7 @@ export default function ClientAddBooking({ onBack, onConfirm }) {
       selectedCar: option,
       vehicle: selectedCar?.vehicle || prev.vehicle,
       plate: String(selectedCar?.plate || prev.plate).toUpperCase(),
-      carSize: String(selectedCar?.size || prev.carSize || ""),
+      carSize: isMotorCoating ? "" : String(selectedCar?.size || prev.carSize || ""),
     }));
   };
 
@@ -212,12 +226,12 @@ export default function ClientAddBooking({ onBack, onConfirm }) {
     }
 
     try {
-      await createBooking({
+      const createdBooking = await createBooking({
         customer: currentUser?.name || "Customer",
         customerEmail: currentUser?.email || "",
         date: toKey(selectedDate),
         vehicle: String(form.vehicle || "").trim(),
-        carSize: String(form.carSize || "").trim(),
+        carSize: isMotorCoating ? "Not Applicable" : String(form.carSize || "").trim(),
         plate: String(form.plate || "").trim().toUpperCase(),
         service: form.service,
         assigned: "",
@@ -230,10 +244,38 @@ export default function ClientAddBooking({ onBack, onConfirm }) {
       });
 
       onConfirm?.({
+        bookingId: String(
+          createdBooking?.booking?.id ||
+            createdBooking?.booking?._id ||
+            createdBooking?.data?.booking?.id ||
+            createdBooking?.data?.booking?._id ||
+            createdBooking?.payment?.bookingId ||
+            createdBooking?.data?.payment?.bookingId ||
+            createdBooking?.id ||
+            createdBooking?._id ||
+            createdBooking?.bookingId ||
+            ""
+        ).trim(),
+        paymentId: String(
+          createdBooking?.payment?.id ||
+            createdBooking?.payment?._id ||
+            createdBooking?.data?.payment?.id ||
+            createdBooking?.data?.payment?._id ||
+            createdBooking?.paymentId ||
+            createdBooking?.data?.paymentId ||
+            ""
+        ).trim(),
+        payment:
+          createdBooking?.payment ||
+          createdBooking?.data?.payment ||
+          createdBooking?.booking?.payment ||
+          createdBooking?.data?.booking?.payment ||
+          null,
+        customerEmail: String(currentUser?.email || "").trim(),
         date: toKey(selectedDate),
         vehicle: String(form.vehicle || "").trim(),
         plate: String(form.plate || "").trim().toUpperCase(),
-        carSize: String(form.carSize || "").trim(),
+        carSize: isMotorCoating ? "Not Applicable" : String(form.carSize || "").trim(),
         service: form.service,
         time: form.time,
         amount: total,
@@ -324,19 +366,30 @@ export default function ClientAddBooking({ onBack, onConfirm }) {
           </View>
           {showErr("plate") && <Text style={styles.errTxt}>{errors.plate}</Text>}
 
-          <Text style={styles.label}>Car Size*</Text>
+          <Text style={styles.label}>{isMotorCoating ? "Car Size" : "Car Size*"}</Text>
           <TouchableOpacity
+            disabled={isMotorCoating}
             activeOpacity={0.9}
-            style={[styles.selectWrap, showErr("carSize") && styles.inputError]}
+            style={[
+              styles.selectWrap,
+              isMotorCoating && styles.selectWrapDisabled,
+              showErr("carSize") && styles.inputError,
+            ]}
             onPress={() => {
+              if (isMotorCoating) return;
               setTouched((prev) => ({ ...prev, carSize: true }));
               setCarSizeOpen(true);
             }}
           >
-            <Text style={[styles.selectTxt, !form.carSize && styles.selectTxtPlaceholder]}>
-              {form.carSize || "Select car size"}
+            <Text
+              style={[
+                styles.selectTxt,
+                (!form.carSize || isMotorCoating) && styles.selectTxtPlaceholder,
+              ]}
+            >
+              {isMotorCoating ? "Not required for Motor Coating" : form.carSize || "Select car size"}
             </Text>
-            <Text style={styles.chev}>v</Text>
+            {!isMotorCoating ? <Text style={styles.chev}>v</Text> : null}
           </TouchableOpacity>
           {showErr("carSize") && <Text style={styles.errTxt}>{errors.carSize}</Text>}
 
@@ -515,7 +568,14 @@ export default function ClientAddBooking({ onBack, onConfirm }) {
           title="Select a Service"
           options={serviceOptions}
           value={form.service}
-          onPick={(option) => setForm((prev) => ({ ...prev, service: option, time: "" }))}
+          onPick={(option) =>
+            setForm((prev) => ({
+              ...prev,
+              service: option,
+              carSize: isMotorCoatingService(option) ? "" : prev.carSize,
+              time: "",
+            }))
+          }
           onClose={() => setServiceOpen(false)}
         />
 

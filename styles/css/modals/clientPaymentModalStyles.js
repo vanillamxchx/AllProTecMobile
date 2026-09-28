@@ -173,6 +173,13 @@ export default StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
   },
+  cashNotice: {
+    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "800",
+    color: "#9A6700",
+  },
   choiceBtn: {
     minHeight: 36,
     paddingHorizontal: 12,

@@ -7,8 +7,8 @@ import {
   View,
 } from "react-native";
 import * as MobileDataModule from "../../context/MobileDataContext";
-import { formatTimeLabel, normalizeAllowedArrivalTimes } from "../../services/bookingWorkflow";
 import { formatPriceRangeLabel } from "../../services/servicePricing";
+import { getServiceDescription } from "../../services/serviceDescription";
 
 const useMobileDataHook =
   MobileDataModule.useMobileData ||
@@ -211,12 +211,7 @@ function normalizeServices(rawServices) {
     .map((service, index) => ({
       id: service.id || service._id || service.serviceId || `service-${index}`,
       name: service.name || service.title || service.serviceName || "Service",
-      description:
-        service.description ||
-        service.summary ||
-        service.details ||
-        service.longDescription ||
-        "Professional vehicle care service.",
+      description: getServiceDescription(service),
       price:
         service.price ||
         service.basePrice ||
@@ -275,10 +270,6 @@ function formatMeta(service) {
   const parts = [];
   parts.push(`Price: ${formatPriceRangeLabel(service)}`);
   if (service.duration) parts.push(`Duration: ${service.duration}`);
-  const arrivalTimes = normalizeAllowedArrivalTimes(service?.allowedArrivalTimes, service?.mins)
-    .map((time) => formatTimeLabel(time))
-    .join(", ");
-  if (arrivalTimes) parts.push(`Arrival: ${arrivalTimes}`);
   return parts.join("  •  ");
 }
 

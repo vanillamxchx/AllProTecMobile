@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -68,7 +68,75 @@ function getCustomerProofAction(payment = {}, getPaymentStageLabel, normalizeSta
   return { label: "Upload DP", disabled: false, mode: "downPayment", stage: getPaymentStageLabel(payment) };
 }
 
-export default function ClientPayments() {
+function normalizeMatchValue(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function findNewBookingPayment(payments = [], booking = {}) {
+  const records = Array.isArray(payments) ? [...payments].reverse() : [];
+  const returnedPayment = booking?.payment && typeof booking.payment === "object"
+    ? booking.payment
+    : null;
+  if (String(returnedPayment?.id || returnedPayment?._id || "").trim()) {
+    return returnedPayment;
+  }
+  const bookingId = String(booking?.bookingId || booking?.id || "").trim();
+  const paymentId = String(booking?.paymentId || "").trim();
+  if (paymentId) {
+    const matchedByPaymentId = records.find(
+      (payment) =>
+        String(payment?.id || "").trim() === paymentId ||
+        String(payment?._id || "").trim() === paymentId ||
+        String(payment?.paymentId || "").trim() === paymentId
+    );
+    if (matchedByPaymentId) return matchedByPaymentId;
+  }
+  if (bookingId) {
+    const matchedById = records.find(
+      (payment) =>
+        String(payment?.bookingId || payment?.booking?.id || payment?.booking?._id || "").trim() === bookingId ||
+        String(payment?.id || "").trim() === bookingId
+    );
+    if (matchedById) return matchedById;
+  }
+
+  const service = normalizeMatchValue(booking?.service);
+  const date = String(booking?.date || "").trim();
+  const plate = normalizeMatchValue(booking?.plate);
+  const vehicle = normalizeMatchValue(booking?.vehicle);
+  const customerEmail = normalizeMatchValue(booking?.customerEmail);
+  if (!service || (!date && !customerEmail)) return null;
+
+  return records.find((payment) => {
+    const paymentService = normalizeMatchValue(
+      payment?.service || payment?.serviceName || payment?.booking?.service
+    );
+    const paymentDate = String(
+      payment?.date || payment?.bookingDate || payment?.booking?.date || ""
+    ).trim();
+    const paymentPlate = normalizeMatchValue(
+      payment?.plate || payment?.plateNumber || payment?.booking?.plate
+    );
+    const paymentVehicle = normalizeMatchValue(
+      payment?.vehicle ||
+        payment?.vehicleModel ||
+        payment?.vehicleType ||
+        payment?.car ||
+        payment?.booking?.vehicle
+    );
+    const paymentCustomerEmail = normalizeMatchValue(
+      payment?.customerEmail || payment?.clientEmail || payment?.booking?.customerEmail
+    );
+    return (
+      paymentService === service &&
+      (!date || paymentDate === date) &&
+      (!customerEmail || paymentCustomerEmail === customerEmail) &&
+      (!plate && !vehicle || (plate && paymentPlate === plate) || (vehicle && paymentVehicle === vehicle))
+    );
+  }) || null;
+}
+
+export default function ClientPayments({ autoOpenBooking = null, onAutoOpenHandled }) {
   const {
     scopedPayments,
     scopedRewards,
@@ -78,15 +146,18 @@ export default function ClientPayments() {
     getPaymentTotal,
     getAmountPaid,
     getRemainingBalance,
+    reload,
   } = useMobileData();
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [modalMode, setModalMode] = useState("details");
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [invoiceSelected, setInvoiceSelected] = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filters, setFilters] = useState({ status: "All", method: "All" });
+  const autoOpenRetryCount = useRef(0);
 
   const statusOptions = useMemo(
     () => Array.from(new Set(scopedPayments.map((payment) => getPaymentStageLabel(payment)).filter(Boolean))),
@@ -131,8 +202,37 @@ export default function ClientPayments() {
       ...payment,
       displayBookingId: payment.bookingId || payment.id,
     });
+    setModalMode("details");
     setModalOpen(true);
   };
+
+  useEffect(() => {
+    if (!autoOpenBooking) {
+      autoOpenRetryCount.current = 0;
+      return;
+    }
+
+    const payment = findNewBookingPayment(scopedPayments, autoOpenBooking);
+    if (payment) {
+      setSelected({
+        ...payment,
+        displayBookingId: payment.bookingId || payment.id,
+      });
+      setModalMode("downPaymentProof");
+      setModalOpen(true);
+      autoOpenRetryCount.current = 0;
+      onAutoOpenHandled?.();
+      return;
+    }
+
+    if (autoOpenRetryCount.current >= 12) return;
+    const retryTimer = setTimeout(() => {
+      autoOpenRetryCount.current += 1;
+      reload?.({ silent: true });
+    }, 750);
+
+    return () => clearTimeout(retryTimer);
+  }, [autoOpenBooking, onAutoOpenHandled, reload, scopedPayments]);
 
   return (
     <SafeAreaView style={{ flex: 1 }}>
@@ -237,7 +337,11 @@ export default function ClientPayments() {
           getPaymentTotal={getPaymentTotal}
           getRemainingBalance={getRemainingBalance}
           normalizeStageStatus={normalizeStageStatus}
-          onClose={() => setModalOpen(false)}
+          initialMode={modalMode}
+          onClose={() => {
+            setModalOpen(false);
+            setModalMode("details");
+          }}
           onViewInvoice={(payment) => {
             setInvoiceSelected(payment);
             setInvoiceOpen(true);

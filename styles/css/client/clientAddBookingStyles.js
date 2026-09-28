@@ -91,6 +91,7 @@ export default StyleSheet.create({
   },
   selectTxt: { fontSize: 13, fontWeight: "800", color: "#111827" },
   selectTxtPlaceholder: { color: "#9CA3AF", fontWeight: "700" },
+  selectWrapDisabled: { backgroundColor: "#F3F4F6", borderColor: "#E5E7EB" },
   chev: { fontSize: 16, fontWeight: "900", color: "#6B7280" },
 
   textAreaWrap: {

@@ -17,6 +17,7 @@ import MobileFilterModal from "../../components/common/MobileFilterModal.jsx";
 import { formatTimeLabel, normalizeAllowedArrivalTimes } from "../../services/bookingWorkflow.js";
 import { formatPriceRangeLabel } from "../../services/servicePricing.js";
 import { formatConsumableSizeLabel, normalizeConsumablesBySize } from "../../services/serviceConsumables.js";
+import { getServiceDescription } from "../../services/serviceDescription.js";
 
 const ICON_SEARCH = require("../../styles/icons/search.png");
 const ICON_FILTER = require("../../styles/icons/filter.png");
@@ -67,7 +68,12 @@ export default function AdminServices() {
     const q = String(query || "").trim().toLowerCase();
     return services.filter((service) => {
       const categoryTerms = getCategorySearchTerms(service);
-      const matchesQuery = !q || `${service.name} ${service.desc} ${categoryTerms}`.toLowerCase().includes(q);
+      const matchesQuery =
+        !q ||
+        [service.name, getServiceDescription(service), categoryTerms]
+          .join(" ")
+          .toLowerCase()
+          .includes(q);
       const matchesCategory = filters.category === "All" || String(service.category || "").trim() === filters.category;
       const statusLabel = service.enabled ? "Enabled" : "Disabled";
       const matchesStatus = filters.status === "All" || statusLabel === filters.status;
@@ -88,7 +94,7 @@ export default function AdminServices() {
             service.id || "-",
             service.name || "-",
             getServiceType(service),
-            service.desc || "-",
+            getServiceDescription(service),
             service.category || "-",
             formatPriceRangeLabel(service),
             Number(service.mins || 0),
@@ -189,7 +195,7 @@ function ServiceSection({ title, services, styles, onSelect, onOpen, emptyLabel 
               <View style={styles.cardTop}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.title}>{service.name}</Text>
-                  <Text style={styles.desc}>{service.desc}</Text>
+                  <Text style={styles.desc}>{getServiceDescription(service)}</Text>
                 </View>
 
                 <Text style={styles.meta}>

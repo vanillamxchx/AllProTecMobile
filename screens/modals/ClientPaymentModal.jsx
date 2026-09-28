@@ -14,7 +14,8 @@ import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import styles from "../../styles/css/modals/clientPaymentModalStyles";
 import { formatCurrency, getRewardPreview } from "../../context/MobileDataContext.jsx";
-import { getReferenceValidationDisplay, validatePaymentProof } from "../../services/paymentReferenceChecker";
+import { validatePaymentProof } from "../../services/paymentReferenceChecker";
+import { getDownPaymentProofImage, getFinalPaymentProofImage } from "../../services/paymentProofs";
 
 function formatDate(value) {
   const raw = String(value || "").trim();
@@ -97,6 +98,7 @@ export default function ClientPaymentModal({
   getPaymentTotal,
   getRemainingBalance,
   normalizeStageStatus,
+  initialMode = "details",
   onClose,
   onViewInvoice,
   onSubmitProof,
@@ -116,7 +118,7 @@ export default function ClientPaymentModal({
 
   useEffect(() => {
     if (!visible) return;
-    setMode("details");
+    setMode(initialMode);
     setProofError("");
     setProofBusy(false);
     setProofForm({
@@ -128,7 +130,7 @@ export default function ClientPaymentModal({
       proofFileName: "",
       rewardId: String(payment?.rewardId || "").trim(),
     });
-  }, [visible, payment]);
+  }, [visible, payment, initialMode]);
 
   const statusRaw = String(getPaymentStageLabel?.(payment) || payment?.status || "-");
   const normalizedStatus = statusRaw.toLowerCase();
@@ -166,9 +168,9 @@ export default function ClientPaymentModal({
     [paymentBaseBeforeReward, selectedReward]
   );
   const paymentCancelled = Boolean(payment?.autoCancelledForNoDownPaymentProof);
-  const downPaymentProofImage = String(payment?.downPaymentProofUrl || payment?.proofImage || "").trim();
+  const downPaymentProofImage = getDownPaymentProofImage(payment);
   const downPaymentProofName = String(payment?.downPaymentProofName || payment?.proofFileName || "").trim();
-  const finalPaymentProofImage = String(payment?.finalPaymentProofUrl || "").trim();
+  const finalPaymentProofImage = getFinalPaymentProofImage(payment);
   const finalPaymentProofName = String(payment?.finalPaymentProofName || "").trim();
   const finalReviewLocked =
     finalPaymentStatus === "Paid" ||
@@ -394,7 +396,6 @@ export default function ClientPaymentModal({
                   <Row label="Reference:" value={payment?.finalPaymentReference || payment?.downPaymentReference || payment?.reference} />
                   <Row label="Amount Paid:" value={`P ${Number(getAmountPaid?.(payment) || 0).toLocaleString()}`} />
                   <Row label="Remaining:" value={`P ${Number(getRemainingBalance?.(payment) || 0).toLocaleString()}`} />
-                  <Row label="Proof Submitted:" value={payment?.proofSubmittedAt ? formatDateTime(payment?.proofSubmittedAt) : "-"} />
                   <Row
                     label="DP Proof Submitted:"
                     value={payment?.downPaymentProofSubmittedAt ? formatDateTime(payment?.downPaymentProofSubmittedAt) : "-"}
@@ -402,22 +403,6 @@ export default function ClientPaymentModal({
                   <Row
                     label="Balance Proof Submitted:"
                     value={payment?.finalPaymentProofSubmittedAt ? formatDateTime(payment?.finalPaymentProofSubmittedAt) : "-"}
-                  />
-                  <Row
-                    label="DP Receipt Time:"
-                    value={payment?.downPaymentTransactionTimestamp ? formatDateTime(payment?.downPaymentTransactionTimestamp) : "-"}
-                  />
-                  <Row
-                    label="Balance Receipt Time:"
-                    value={payment?.finalPaymentTransactionTimestamp ? formatDateTime(payment?.finalPaymentTransactionTimestamp) : "-"}
-                  />
-                  <Row
-                    label="DP Reviewed At:"
-                    value={payment?.downPaymentReviewedAt ? formatDateTime(payment?.downPaymentReviewedAt) : "-"}
-                  />
-                  <Row
-                    label="Balance Reviewed At:"
-                    value={payment?.finalPaymentReviewedAt ? formatDateTime(payment?.finalPaymentReviewedAt) : "-"}
                   />
                   {payment?.downPaymentDueAt ? (
                     <Row
@@ -445,28 +430,6 @@ export default function ClientPaymentModal({
                       <Image source={{ uri: finalPaymentProofImage }} style={styles.proofPreviewImage} resizeMode="cover" />
                     </View>
                   ) : null}
-
-                  <ReferenceValidationBlock
-                    title="Down Payment Reference Validation"
-                    result={getReferenceValidationDisplay({
-                      method: payment?.downPaymentMethod || payment?.method,
-                      reference: payment?.downPaymentReference || payment?.reference,
-                      proofImage: downPaymentProofImage,
-                      status: payment?.downPaymentReferenceCheckStatus,
-                      checkedAt: payment?.downPaymentReferenceCheckedAt,
-                    })}
-                  />
-
-                  <ReferenceValidationBlock
-                    title="Final Payment Reference Validation"
-                    result={getReferenceValidationDisplay({
-                      method: payment?.finalPaymentMethod,
-                      reference: payment?.finalPaymentReference,
-                      proofImage: finalPaymentProofImage,
-                      status: payment?.finalPaymentReferenceCheckStatus,
-                      checkedAt: payment?.finalPaymentReferenceCheckedAt,
-                    })}
-                  />
 
                   <View style={styles.row}>
                     <Text style={styles.label}>Invoice:</Text>
@@ -573,6 +536,9 @@ export default function ClientPaymentModal({
                       );
                     })}
                   </View>
+                  <Text style={styles.cashNotice}>
+                    Cash payment is for walk-in customers only.
+                  </Text>
 
                   {!isFinalPaymentMode ? (
                     <>
@@ -692,18 +658,4 @@ function Row({ label, value }) {
 
 function FieldLabel({ text }) {
   return <Text style={styles.fieldLabel}>{text}</Text>;
-}
-
-function ReferenceValidationBlock({ title, result }) {
-  return (
-    <View style={styles.rowTop}>
-      <Text style={styles.label}>{title}</Text>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.value}>{result?.message || "-"}</Text>
-        {result?.checkedAt ? (
-          <Text style={styles.fileTxt}>Checked on {formatDateTime(result.checkedAt)}</Text>
-        ) : null}
-      </View>
-    </View>
-  );
 }

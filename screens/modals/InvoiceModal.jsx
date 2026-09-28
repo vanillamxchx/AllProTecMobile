@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, TouchableOpacity, View, Image } from "react-native";
 import { getRewardPreview, isRewardExpired, useMobileData } from "../../context/MobileDataContext.jsx";
-import { getReferenceValidationDisplay } from "../../services/paymentReferenceChecker";
 import styles from "../../styles/css/modals/invoiceModalStyles.js";
 
 function formatDateTime(value) {
@@ -126,32 +125,12 @@ export default function InvoiceModal({ visible, payment, onClose }) {
                 <InfoRow label="Method" value={payment?.finalPaymentMethod || payment?.downPaymentMethod || payment?.method} />
                 <InfoRow label="Reference" value={payment?.finalPaymentReference || payment?.downPaymentReference || payment?.reference} />
                 <InfoRow
-                  label="Proof Submitted"
-                  value={payment?.proofSubmittedAt ? formatDateTime(payment?.proofSubmittedAt) : "-"}
-                />
-                <InfoRow
                   label="DP Proof Submitted"
                   value={payment?.downPaymentProofSubmittedAt ? formatDateTime(payment?.downPaymentProofSubmittedAt) : "-"}
                 />
                 <InfoRow
                   label="Balance Proof Submitted"
                   value={payment?.finalPaymentProofSubmittedAt ? formatDateTime(payment?.finalPaymentProofSubmittedAt) : "-"}
-                />
-                <InfoRow
-                  label="DP Receipt Time"
-                  value={payment?.downPaymentTransactionTimestamp ? formatDateTime(payment?.downPaymentTransactionTimestamp) : "-"}
-                />
-                <InfoRow
-                  label="Balance Receipt Time"
-                  value={payment?.finalPaymentTransactionTimestamp ? formatDateTime(payment?.finalPaymentTransactionTimestamp) : "-"}
-                />
-                <InfoRow
-                  label="DP Reviewed At"
-                  value={payment?.downPaymentReviewedAt ? formatDateTime(payment?.downPaymentReviewedAt) : "-"}
-                />
-                <InfoRow
-                  label="Balance Reviewed At"
-                  value={payment?.finalPaymentReviewedAt ? formatDateTime(payment?.finalPaymentReviewedAt) : "-"}
                 />
               </View>
 
@@ -200,38 +179,6 @@ export default function InvoiceModal({ visible, payment, onClose }) {
                   />
                 </View>
               )}
-
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Reference Validation</Text>
-                <InfoRow
-                  label="Down Payment"
-                  value={getReferenceValidationDisplay({
-                    method: payment?.downPaymentMethod || payment?.method,
-                    reference: payment?.downPaymentReference || payment?.reference,
-                    proofImage: downPaymentProofImage,
-                    status: payment?.downPaymentReferenceCheckStatus,
-                    checkedAt: payment?.downPaymentReferenceCheckedAt,
-                  }).message}
-                />
-                <InfoRow
-                  label="DP Checked"
-                  value={payment?.downPaymentReferenceCheckedAt ? formatDateTime(payment?.downPaymentReferenceCheckedAt) : "-"}
-                />
-                <InfoRow
-                  label="Final Payment"
-                  value={getReferenceValidationDisplay({
-                    method: payment?.finalPaymentMethod,
-                    reference: payment?.finalPaymentReference,
-                    proofImage: finalPaymentProofImage,
-                    status: payment?.finalPaymentReferenceCheckStatus,
-                    checkedAt: payment?.finalPaymentReferenceCheckedAt,
-                  }).message}
-                />
-                <InfoRow
-                  label="Final Checked"
-                  value={payment?.finalPaymentReferenceCheckedAt ? formatDateTime(payment?.finalPaymentReferenceCheckedAt) : "-"}
-                />
-              </View>
 
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Amount Breakdown</Text>

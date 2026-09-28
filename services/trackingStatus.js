@@ -31,7 +31,7 @@ export function getTrackingStatusMeta(status) {
 
 export function getTrackingTimeline(record) {
   const meta = getTrackingStatusMeta(record?.status);
-  const hasConfirmedSchedule = ["confirmed", "arrived", "inProgress", "completed"].includes(meta.key);
+  const hasConfirmedSchedule = ["scheduled", "confirmed", "arrived", "inProgress", "completed"].includes(meta.key);
 
   return [
     { label: "Booking received", active: Boolean(record?.id) },
